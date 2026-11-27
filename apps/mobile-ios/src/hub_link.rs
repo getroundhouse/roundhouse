@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused, Waits};
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, Drafts, Hub, OlderSide, RecordsFeed, RemoteHub};
+use client_core::{ClientError, Connection, Drafts, Hub, OlderSide, RecordsFeed, RemoteHub};
 use client_ui::{NeedsUpdating, needs_updating};
 use gpui_kit::{Context, Task};
 use protocol::model::{Workspace, WorkspaceStatus};
@@ -16,11 +16,11 @@ const CLIENT_NAME: &str = "roundhouse-ios";
 
 /// How the app reaches the hub it paired with. It's given to the app as it opens, so a test can have it connect to a
 /// hub of its own, such as the gallery's, which answers from fixed data on a socket.
-pub(crate) type ConnectTo = Arc<dyn Fn(&RemoteHub) -> Result<Client, ClientError> + Send + Sync>;
+pub(crate) type ConnectTo = Arc<dyn Fn(&RemoteHub) -> Result<Connection, ClientError> + Send + Sync>;
 
 /// As the app connects on a phone: over the network, to whichever of the hub's addresses answers first.
 pub(crate) fn over_the_network() -> ConnectTo {
-    Arc::new(|hub| Client::connect_remote(hub, CLIENT_NAME))
+    Arc::new(|hub| Connection::connect_remote(hub, CLIENT_NAME))
 }
 
 /// How the connection stands, as the phone says it.
@@ -83,7 +83,7 @@ impl Connect for PairedHub {
     type With = ();
     type Failure = Failure;
 
-    fn connect(&mut self) -> Result<(Client, ()), Refused<Failure>> {
+    fn connect(&mut self) -> Result<(Connection, ()), Refused<Failure>> {
         (self.connect)(&self.hub).map(|client| (client, ())).map_err(|e| Refused::by(&e, Failure::of(&self.hub, &e)))
     }
 

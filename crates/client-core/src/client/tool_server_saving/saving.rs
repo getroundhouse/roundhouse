@@ -5,7 +5,7 @@ use protocol::client::tool_server_checks::ToolServerToCheck;
 use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaveCancel};
 use protocol::model::ToolServerSaveId;
 
-use super::super::{Client, Reply, Result};
+use super::super::{Connection, Reply, Result};
 use crate::tool_server_checks::{Saved, saved};
 
 /// A save of a tool server, under way on a thread of its own, as [`ToolServerSaving::start`] starts it. Dropping it
@@ -14,7 +14,7 @@ use crate::tool_server_checks::{Saved, saved};
 pub struct ToolServerSaving {
     saving: Arc<Saving>,
     /// The connection the save went on, which its cancel goes on after it. `None` for one never sent.
-    client: Option<Client>,
+    connection: Option<Connection>,
 }
 
 impl ToolServerSaving {
@@ -31,14 +31,14 @@ impl ToolServerSaving {
         url: String,
     ) -> (Self, Reply<Saved>) {
         match hub.ready() {
-            Ok(client) => Self::on(&client, of, when, name, url),
-            Err(e) => (Self { saving: Arc::new(Saving::default()), client: None }, Reply::now(Err(e))),
+            Ok(connection) => Self::on(&connection, of, when, name, url),
+            Err(e) => (Self { saving: Arc::new(Saving::default()), connection: None }, Reply::now(Err(e))),
         }
     }
 
-    /// As [`ToolServerSaving::start`], on `client`.
+    /// As [`ToolServerSaving::start`], on `connection`.
     pub(crate) fn on(
-        client: &Client,
+        connection: &Connection,
         of: ToolServerToCheck,
         when: SaveWhen,
         name: String,
@@ -46,8 +46,8 @@ impl ToolServerSaving {
     ) -> (Self, Reply<Saved>) {
         let saving = Arc::new(Saving::default());
         let on = Arc::clone(&saving);
-        let reply = client.start(move |client| on.save(client, of, when, &name, &url));
-        (Self { saving, client: Some(client.clone()) }, reply)
+        let reply = connection.start(move |connection| on.save(connection, of, when, &name, &url));
+        (Self { saving, connection: Some(connection.clone()) }, reply)
     }
 }
 
@@ -55,9 +55,9 @@ impl Drop for ToolServerSaving {
     /// Lets go of it on a thread of its own, since that waits for the hub to have had the cancel, and quitting waits
     /// for it, as for any call that changes something. One that has been answered has nothing to let go of.
     fn drop(&mut self) {
-        if let Some(client) = self.client.as_ref().filter(|_| self.saving.is_under_way()) {
+        if let Some(connection) = self.connection.as_ref().filter(|_| self.saving.is_under_way()) {
             let saving = Arc::clone(&self.saving);
-            drop(client.start(move |client| saving.let_go(client)));
+            drop(connection.start(move |connection| saving.let_go(connection)));
         }
     }
 }
@@ -95,37 +95,44 @@ impl Saving {
     /// ended, and it ends as it answers.
     pub(super) fn save(
         &self,
-        client: &Client,
+        connection: &Connection,
         of: ToolServerToCheck,
         when: SaveWhen,
         name: &str,
         url: &str,
     ) -> Result<Saved> {
-        let saved = self.saving(client, of, when, name, url);
+        let saved = self.saving(connection, of, when, name, url);
         *self.stands.lock() = Stands::Ended;
         saved
     }
 
     /// Lets go of it, so nothing is added or saved, unless the hub has begun to save it. Then it's saved all the same,
     /// and the save answers with its record. It blocks until the hub has had the cancel.
-    pub(super) fn let_go(&self, client: &Client) -> Result<()> {
+    pub(super) fn let_go(&self, connection: &Connection) -> Result<()> {
         let sent = {
             let mut stands = self.stands.lock();
             match std::mem::replace(&mut *stands, Stands::Ended) {
-                Stands::Sent => client.send_call(ToolServerSaveCancel { id: self.id.clone() })?,
+                Stands::Sent => connection.send_call(ToolServerSaveCancel { id: self.id.clone() })?,
                 Stands::Unsent | Stands::Ended => return Ok(()),
             }
         };
         sent.reply()
     }
 
-    fn saving(&self, client: &Client, of: ToolServerToCheck, when: SaveWhen, name: &str, url: &str) -> Result<Saved> {
+    fn saving(
+        &self,
+        connection: &Connection,
+        of: ToolServerToCheck,
+        when: SaveWhen,
+        name: &str,
+        url: &str,
+    ) -> Result<Saved> {
         let sent = {
             let mut stands = self.stands.lock();
             if *stands == Stands::Ended {
                 return Ok(Saved::LetGo);
             }
-            let sent = client.send_call(ToolServerSave { id: self.id.clone(), of, when })?;
+            let sent = connection.send_call(ToolServerSave { id: self.id.clone(), of, when })?;
             *stands = Stands::Sent;
             sent
         };

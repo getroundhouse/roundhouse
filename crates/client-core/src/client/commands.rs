@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 
 use protocol::model::SessionId;
 
-use super::{Client, ClientError, Lasting, Place, Result};
+use super::{ClientError, Connection, Lasting, Place, Result};
 
 /// How many started calls are under way, and who's waiting for there to be none.
 #[derive(Default)]
@@ -57,14 +57,14 @@ impl Running {
 pub struct Commands(Arc<Running>);
 
 impl Commands {
-    /// Hears once no call started with [`Client::start`] is under way, at once if none is.
+    /// Hears once no call started with [`Connection::start`] is under way, at once if none is.
     pub fn finished(&self) -> flume::Receiver<()> {
         self.0.finished()
     }
 }
 
 /// Ends a started call however its thread ends, even by panicking, or by never starting, in the count it began in.
-struct Ending(Client, Arc<Running>);
+struct Ending(Connection, Arc<Running>);
 
 impl Drop for Ending {
     fn drop(&mut self) {
@@ -72,7 +72,7 @@ impl Drop for Ending {
     }
 }
 
-/// The reply to a call started with [`Client::start`].
+/// The reply to a call started with [`Connection::start`].
 pub struct Reply<T>(flume::Receiver<Result<T>>);
 
 impl<T> Reply<T> {
@@ -103,10 +103,10 @@ impl<T> Reply<T> {
     }
 }
 
-impl Client {
+impl Connection {
     /// Starts a call that changes something, on a thread of its own, and returns at once, so the caller never waits
     /// on the hub. The call runs to the end whatever the caller does next, and [`Commands::finished`] waits for it.
-    pub fn start<T: Send + 'static>(&self, call: impl FnOnce(&Client) -> Result<T> + Send + 'static) -> Reply<T> {
+    pub fn start<T: Send + 'static>(&self, call: impl FnOnce(&Connection) -> Result<T> + Send + 'static) -> Reply<T> {
         let (reply, replied) = Reply::channel();
         let failed = reply.clone();
         // Counted before this returns, so a `finished` asked for after it always waits for it.
@@ -141,7 +141,7 @@ impl Client {
 }
 
 impl Lasting {
-    /// As [`Client::is_sending`] says, whichever connection the prompt went on.
+    /// As [`Connection::is_sending`] says, whichever connection the prompt went on.
     pub(crate) fn is_sending(&self, session_id: &SessionId) -> bool {
         self.lines.holds(session_id)
     }
@@ -163,7 +163,7 @@ mod tests {
     const TIMEOUT: Duration = Duration::from_secs(10);
 
     /// A client of a hub that only says hello, which is all these calls need.
-    fn connected(socket: &Path) -> Client {
+    fn connected(socket: &Path) -> Connection {
         stand_in_hub::connect(socket, |_| Does::Nothing)
     }
 

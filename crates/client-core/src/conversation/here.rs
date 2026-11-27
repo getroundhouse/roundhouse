@@ -64,7 +64,7 @@ impl Conversation {
         }
         let id = self.session.clone();
         // Nothing is being read, so there's nothing to say first.
-        hub.start(move |client| client.call(SessionConversationEnd { id }).map(drop))
+        hub.start(move |connection| connection.call(SessionConversationEnd { id }).map(drop))
     }
 
     /// The hub refused to turn the mode off, so it's still on: the conversation carries on, read here again from the

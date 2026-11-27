@@ -20,7 +20,7 @@ use crate::support::{
 };
 
 /// The changes of mode in the log.
-fn mode_changes(client: &client_core::Client, session: &protocol::model::SessionId) -> Vec<ApprovalMode> {
+fn mode_changes(client: &client_core::Connection, session: &protocol::model::SessionId) -> Vec<ApprovalMode> {
     read_all(client, session)
         .into_iter()
         .filter_map(|e| match e.body {

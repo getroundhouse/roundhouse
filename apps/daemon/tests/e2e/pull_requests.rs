@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Connection};
 use hub::GithubPullRequestState::{Merged, Open};
 use protocol::client::ErrorCode;
 use protocol::client::subscriptions::Follow;
@@ -16,7 +16,7 @@ use crate::support::github::{StandInGithub, workspace_on_github};
 use crate::support::{self, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request the workspace's record links to, as every client gets it.
-fn recorded(client: &Client, id: &WorkspaceId) -> Option<u64> {
+fn recorded(client: &Connection, id: &WorkspaceId) -> Option<u64> {
     support::workspace(client, id).pull_request_linked().map(|link| link.number.get())
 }
 
@@ -132,7 +132,7 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
 
 /// `client` following the hub, as an app does as it connects, which has the hub read what nobody asked for, until
 /// what this returns is dropped.
-fn following_the_hub(client: &Client) -> client_core::Subscription {
+fn following_the_hub(client: &Connection) -> client_core::Subscription {
     client.follow(Follow::Hub).unwrap()
 }
 
@@ -165,7 +165,7 @@ fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged
     client.workspace_pull_request(&workspace.id).unwrap();
     github.say_from(7, Merged, workspace.branch.as_str());
     let merged = client.workspace_pull_request(&workspace.id).unwrap().map(|pr| pr.pull_request.said().state);
-    let head = |client: &Client| {
+    let head = |client: &Connection| {
         let known = |branches: Option<&_>| branches.is_some();
         support::branches_once(client, &workspace.id, "the branches", known).map(|branches| branches.head)
     };
@@ -296,7 +296,7 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
     let socket = stack.socket();
     let ask = |id: WorkspaceId| {
         let socket = socket.clone();
-        std::thread::spawn(move || Client::connect(&socket, "test").unwrap().workspace_pull_request(&id).unwrap())
+        std::thread::spawn(move || Connection::connect(&socket, "test").unwrap().workspace_pull_request(&id).unwrap())
     };
     let first = ask(workspace.id.clone());
     wait_until("the first to reach GitHub", || github.queries() == asked + 1);

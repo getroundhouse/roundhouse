@@ -7,9 +7,9 @@ use protocol::model::{
     AttachmentId, CommitId, FileContents, FileOpened, FilePages, FileRange, SessionId, WorkspaceId, WorktreeFiles,
 };
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Adding the same `id` again returns what the first one added.
     pub fn attachment_add(
         &self,

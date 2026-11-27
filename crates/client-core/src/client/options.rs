@@ -4,9 +4,9 @@ use protocol::capability::settings::Settings;
 use protocol::client::sessions;
 use protocol::model::{AgentKind, ClientRequestId, Session, SessionId, WorkspaceId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// See [`sessions::SessionCreate`]. Sending the same `client_request_id` again returns the session the first
     /// request made.
     pub fn session_create(

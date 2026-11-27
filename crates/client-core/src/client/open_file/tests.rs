@@ -12,7 +12,7 @@ use protocol::model::{CommitId, FileOpened, FilePage, FilePages, OpenedText, Pag
 
 use super::{OpenFile, Opening};
 use crate::Hub;
-use crate::client::Client;
+use crate::client::Connection;
 use crate::client::open_session::tests::{refused, start_hub_answering};
 
 /// How many lines the files here have, and a page of them.
@@ -43,7 +43,7 @@ fn page(index: u32) -> FilePage {
 
 /// The file, opened from a hub on `socket`, with the hub.
 fn start(socket: &Path) -> (Hub, OpenFile) {
-    let hub = Hub::caught_up_on(&Client::connect(socket, "test").unwrap());
+    let hub = Hub::caught_up_on(&Connection::connect(socket, "test").unwrap());
     let open = hub.open_file(&WorkspaceId::from("w"), &CommitId::from("c"), "f");
     (hub, open)
 }
@@ -102,7 +102,7 @@ fn a_file_that_couldnt_be_opened_is_opened_again_on_the_next_connection() {
     let (hub, failed) = start(&failing);
 
     wait_for(&failed, "it to fail", |opening| matches!(opening, Opening::Failed));
-    hub.carry_on_to(&Client::connect(&newer, "test").unwrap());
+    hub.carry_on_to(&Connection::connect(&newer, "test").unwrap());
     assert!(failed.open_again(), "opened again");
 
     wait_for(&failed, "it to open", |opening| matches!(opening, Opening::Text(_)));

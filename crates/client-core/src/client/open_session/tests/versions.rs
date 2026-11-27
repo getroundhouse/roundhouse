@@ -12,7 +12,7 @@ use std::sync::Arc;
 use super::super::View;
 use super::super::source::SessionSource;
 use super::{answered_simply, session, start_hub_answering};
-use crate::Client;
+use crate::Connection;
 use crate::client::follow::Source as _;
 use crate::session_log::SessionLog;
 use protocol::prompt::PromptFrom;
@@ -24,7 +24,7 @@ fn a_version_stays_as_it_was_while_the_log_goes_on() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let _heard = start_hub_answering(&socket, answered_simply);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session(), View::Own);
     let before = open.version();
@@ -61,7 +61,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         let events = (from..from + u64::from(read.limit)).map(notice).collect();
         Some(ReplyOutcome::Response(ClientResponse::PlacedEvents(log::PlacedEvents { events, last_place: LAST })))
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let hub = Hub::caught_up_on(&client);
     let feed = hub.records().unwrap();
     let mut source = SessionSource {

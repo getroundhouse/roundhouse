@@ -5,37 +5,37 @@ use std::time::{Duration, Instant};
 
 use protocol::client::{ErrorCode, HubStatus, admin};
 
-use super::{Client, ClientError, Result, hub_is_missing};
+use super::{ClientError, Connection, Result, hub_is_missing};
 
 /// Longer than a hub waits for a stuck worker, which is 15 seconds.
 const STOP_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A connection that doesn't say hello, so it works across a real protocol break, when [`Client::connect`]
+/// A connection that doesn't say hello, so it works across a real protocol break, when [`Connection::connect`]
 /// gets refused. All it can do is see the hub and stop it, which is what those requests never changing buys.
 pub struct HubAdmin {
-    client: Client,
+    connection: Connection,
 }
 
 impl HubAdmin {
     pub fn connect(socket: &Path) -> Result<Self> {
-        Ok(Self { client: Client::open(socket)? })
+        Ok(Self { connection: Connection::open(socket)? })
     }
 
     pub fn status(&self) -> Result<HubStatus> {
-        self.client.hub_status()
+        self.connection.hub_status()
     }
 
     /// Stops the hub and its agents, and returns once it has exited. A hub holds this connection open
     /// until then, and only after it has let go of its lock, so a new one can start straight away.
     pub fn stop(self) -> Result<()> {
-        self.client.hub_shutdown()?;
-        wait_for_exit(&self.client)
+        self.connection.hub_shutdown()?;
+        wait_for_exit(&self.connection)
     }
 }
 
 /// Returns once the hub this client asked to stop has exited, which closes the connection.
-fn wait_for_exit(client: &Client) -> Result<()> {
-    if exited_within(client, STOP_TIMEOUT) {
+fn wait_for_exit(connection: &Connection) -> Result<()> {
+    if exited_within(connection, STOP_TIMEOUT) {
         Ok(())
     } else {
         Err(ClientError::Unexpected(format!("the hub didn't stop within {STOP_TIMEOUT:?}")))
@@ -47,9 +47,9 @@ fn wait_for_exit(client: &Client) -> Result<()> {
     clippy::disallowed_methods,
     reason = "the pace a client looks again whether the hub it asked to stop has closed the connection"
 )]
-fn exited_within(client: &Client, wait: Duration) -> bool {
+fn exited_within(connection: &Connection, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
-    while !client.is_disconnected() {
+    while !connection.is_disconnected() {
         if Instant::now() >= deadline {
             return false;
         }
@@ -72,14 +72,14 @@ pub enum Restart {
 /// next hub to connect to again. Only a hub whose status says [`HubStatus::keeps_workers`] knows how. It first waits for
 /// a setup script that's running, so with one running this returns at once, and otherwise once the hub has exited,
 /// unless something still holds it up after as long as a hub gets to stop, such as another client's request.
-pub fn restart_hub(client: &Client) -> Result<Restart> {
-    let setups = client.hub_status()?.running_setups;
-    match client.call(admin::HubRestart) {
+pub fn restart_hub(connection: &Connection) -> Result<Restart> {
+    let setups = connection.hub_status()?.running_setups;
+    match connection.call(admin::HubRestart) {
         // The hub did what was asked before its reply got out.
         Err(e) if hub_is_missing(&e) => {}
         other => other?,
     }
-    let exited = setups == 0 && exited_within(client, STOP_TIMEOUT);
+    let exited = setups == 0 && exited_within(connection, STOP_TIMEOUT);
     Ok(if exited { Restart::Exited } else { Restart::Finishing })
 }
 
@@ -117,9 +117,9 @@ pub enum IdleStop {
 /// Stops the hub this client is connected to if that cuts nothing off, and returns once it has exited, or says it's
 /// busy. The hub decides as it stops, so a prompt sent after the client last saw it idle isn't cut off. Asked on the
 /// client's own connection, since the hub counts a request on any other as one it would cut off.
-pub fn stop_hub_if_idle(client: &Client) -> Result<IdleStop> {
-    match client.hub_shutdown_if_idle() {
-        Ok(()) => wait_for_exit(client).map(|()| IdleStop::Stopped),
+pub fn stop_hub_if_idle(connection: &Connection) -> Result<IdleStop> {
+    match connection.hub_shutdown_if_idle() {
+        Ok(()) => wait_for_exit(connection).map(|()| IdleStop::Stopped),
         Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict => Ok(IdleStop::Busy),
         Err(e) => Err(e),
     }

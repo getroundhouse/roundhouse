@@ -12,7 +12,7 @@ fn kept(id: &str) -> Attachment {
 }
 
 /// A hub that keeps a chat's file `chat` and the dialog's file `dialog`, each with its own bytes, and has no other.
-fn hub_that_keeps(dir: &tempfile::TempDir) -> Client {
+fn hub_that_keeps(dir: &tempfile::TempDir) -> Connection {
     stand_in_hub::connect(&dir.path().join("hub.sock"), |request| {
         // What each file it keeps is, by the request that reads it.
         let read = if let ClientRequest::AttachmentRead(attachments::AttachmentRead { id, .. }) = &request {

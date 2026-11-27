@@ -5,9 +5,9 @@
 use protocol::client::tool_servers;
 use protocol::model::{ToolServer, ToolServerAuthGiven, ToolServerId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Adds the tool server `id`, a new one from [`new_tool_server_id`], called `name`, at `url`, which is to know the
     /// person as `auth` says, and answers with its record. See [`tool_servers::ToolServerAdd`].
     pub fn tool_server_add(

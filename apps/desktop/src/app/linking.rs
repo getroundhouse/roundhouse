@@ -6,7 +6,7 @@ use client_core::link::LinkState;
 use gpui_kit::Context;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, restarts};
+use super::{AppView, ConnectionFailure, Linking, Unconnected, hub_source, restarts};
 
 impl AppView {
     /// Listens to the link, which tells of each change: how it stands, a new connection, the records, or an error.
@@ -45,23 +45,23 @@ impl AppView {
             crate::updates::keep_without_the_hub(self.hub.build_version, cx);
         }
         match shown(state) {
-            Some(Connection::Ready) => {
-                self.connection = Connection::Ready;
+            Some(Linking::Ready) => {
+                self.linking = Linking::Ready;
                 self.tell_tool_sign_in(cx);
             }
-            Some(connection) if !same(&self.connection, &connection) => {
+            Some(linking) if !same(&self.linking, &linking) => {
                 // The hub said its status, so the app has heard which release it's on. One newer than the app, which
                 // the app needs to update to talk to, would otherwise hold back every update that says the oldest
                 // release it updates from.
-                if let Connection::AcrossABreak(status) = &connection {
+                if let Linking::AcrossABreak(status) = &linking {
                     self.keep_workers_of(status, cx);
                 }
-                self.set_connection(connection, cx);
+                self.set_linking(linking, cx);
                 cx.notify();
             }
             Some(_) | None => {}
         }
-        if !matches!(self.connection, Connection::Ready) {
+        if !matches!(self.linking, Linking::Ready) {
             return;
         }
         if let Some(error) = self.link.take_errors().first() {
@@ -80,8 +80,8 @@ impl AppView {
         self.forget_the_hub(cx);
         // The link's changes gather into one, so the app may not have seen the last connection go. Until this one has
         // caught up, nothing is sent on either, and each pane holds what it would send.
-        if matches!(self.connection, Connection::Ready) {
-            self.set_connection(Connection::Connecting, cx);
+        if matches!(self.linking, Linking::Ready) {
+            self.set_linking(Linking::Connecting, cx);
         }
         // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
         self.hub_update_asked = None;
@@ -114,16 +114,16 @@ impl AppView {
 /// What the window shows of how the link stands, or `None` to go on showing what it does while a new connection catches
 /// up. A hub the link tries again by itself goes on showing why it failed, so it doesn't flash between that and
 /// Connecting.
-fn shown(state: LinkState<Unconnected>) -> Option<Connection> {
+fn shown(state: LinkState<Unconnected>) -> Option<Linking> {
     match state {
-        LinkState::Connecting(None) => Some(Connection::Connecting),
+        LinkState::Connecting(None) => Some(Linking::Connecting),
         LinkState::CatchingUp => None,
-        LinkState::Ready => Some(Connection::Ready),
+        LinkState::Ready => Some(Linking::Ready),
         LinkState::Connecting(Some(unconnected))
         | LinkState::Waiting(unconnected)
         | LinkState::Stopped(unconnected) => Some(match unconnected {
-            Unconnected::Failed(failure) => Connection::Failed(failure),
-            Unconnected::AcrossABreak(status) => Connection::AcrossABreak(status),
+            Unconnected::Failed(failure) => Linking::Failed(failure),
+            Unconnected::AcrossABreak(status) => Linking::AcrossABreak(status),
         }),
     }
 }
@@ -135,12 +135,12 @@ fn failed_to_start(state: &LinkState<Unconnected>) -> bool {
 }
 
 /// Whether `next` shows as `shown` does, so the panes needn't be told again.
-fn same(shown: &Connection, next: &Connection) -> bool {
+fn same(shown: &Linking, next: &Linking) -> bool {
     match (shown, next) {
-        (Connection::Connecting, Connection::Connecting) => true,
-        (Connection::Failed(was), Connection::Failed(is)) => was == is,
-        (Connection::AcrossABreak(was), Connection::AcrossABreak(is)) => was == is,
-        (Connection::Connecting | Connection::Ready | Connection::Failed(_) | Connection::AcrossABreak(_), _) => false,
+        (Linking::Connecting, Linking::Connecting) => true,
+        (Linking::Failed(was), Linking::Failed(is)) => was == is,
+        (Linking::AcrossABreak(was), Linking::AcrossABreak(is)) => was == is,
+        (Linking::Connecting | Linking::Ready | Linking::Failed(_) | Linking::AcrossABreak(_), _) => false,
     }
 }
 
@@ -153,14 +153,13 @@ mod tests {
     #[test]
     fn a_hub_tried_again_by_itself_keeps_showing_why_it_failed() {
         let unreachable = || Unconnected::Failed(ConnectionFailure::Unreachable { hosts: vec!["127.0.0.1:1".into()] });
-        let failed = |shown: Option<Connection>| {
-            matches!(shown, Some(Connection::Failed(ConnectionFailure::Unreachable { .. })))
-        };
+        let failed =
+            |shown: Option<Linking>| matches!(shown, Some(Linking::Failed(ConnectionFailure::Unreachable { .. })));
 
         assert!(failed(shown(LinkState::Connecting(Some(unreachable())))), "trying again");
         assert!(failed(shown(LinkState::Waiting(unreachable()))), "waiting to");
         assert!(failed(shown(LinkState::Stopped(unreachable()))), "stopped");
-        assert!(matches!(shown(LinkState::Connecting(None)), Some(Connection::Connecting)), "asked to try");
+        assert!(matches!(shown(LinkState::Connecting(None)), Some(Linking::Connecting)), "asked to try");
     }
 
     /// Only then does the app's update go by the app's own release alone.

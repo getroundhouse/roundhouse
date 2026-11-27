@@ -64,7 +64,7 @@ pub(crate) use connection::Lasting;
 #[cfg(test)]
 use connection::SUBSCRIPTION_CAPACITY;
 pub use connection::hub_is_missing;
-pub use connection::{Client, ClientError, Ended, Result, SubscriptionItem};
+pub use connection::{ClientError, Connection, Ended, Result, SubscriptionItem};
 pub use subscribing::Subscription;
 
 mod transport;

@@ -11,7 +11,7 @@ use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFr
 use protocol::model::{AgentDescription, AgentKind, NewWorkspaceDraftToKeep, Rev, Session, Title, Workspace};
 
 use super::*;
-use crate::Client;
+use crate::Connection;
 use crate::stand_in_hub::{self, Does};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -26,7 +26,7 @@ fn stand_in(
     socket: &Path,
     agents: ReplyOutcome,
     mut answers: impl FnMut(&ClientRequest) -> Option<ReplyOutcome> + Send + 'static,
-) -> Client {
+) -> Connection {
     stand_in_hub::connect(socket, move |request| {
         let answer = if let ClientRequest::Subscribe(subscribe) = &request {
             return stand_in_hub::subscribed(subscribe, |subscription_id, _| {
@@ -50,7 +50,7 @@ fn following_on(
     socket: &Path,
     agents: ReplyOutcome,
     answers: impl FnMut(&ClientRequest) -> Option<ReplyOutcome> + Send + 'static,
-) -> (Client, RecordsFeed) {
+) -> (Connection, RecordsFeed) {
     let client = stand_in(socket, agents, answers);
     let feed = RecordsFeed::start(&client);
     waiting::thread::until(TIMEOUT, "the copy never caught up", || feed.connected());

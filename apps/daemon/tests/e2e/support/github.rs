@@ -1,7 +1,7 @@
 //! A stand-in for GitHub that the hub reads pull requests from, in the test's own process, so it lasts across the hub
 //! starting again, and answers each read from the pull requests of example/project a test sets.
 
-use client_core::Client;
+use client_core::Connection;
 use hub::{GithubAnswer, GithubPullRequestState, GithubPullRequests, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::model::{GithubToken, Session, Workspace};
@@ -36,7 +36,7 @@ impl StandInGithub {
     /// A workspace on GitHub, as [`workspace_on_github`] says, with its branch pushed to `origin`, as [`Self::push`]
     /// says, once the read of its pull request that the push brings has found what GitHub has from the branch, so it
     /// can't land after a test's own.
-    pub(crate) fn pushed_workspace(&self, stack: &Stack, client: &Client) -> (Workspace, Session) {
+    pub(crate) fn pushed_workspace(&self, stack: &Stack, client: &Connection) -> (Workspace, Session) {
         let (workspace, session) = workspace_on_github(stack, client);
         self.push(&workspace);
         let looked = || super::workspace(client, &workspace.id).pull_request_link.is_some();
@@ -101,14 +101,14 @@ impl StandInGithub {
 
 /// A workspace of `stack`'s, as [`Stack::workspace`] makes one, once its repository's record has the address its
 /// worker read, so the hub knows which repository on GitHub its pull requests are of.
-pub(crate) fn workspace_on_github(stack: &Stack, client: &Client) -> (Workspace, Session) {
+pub(crate) fn workspace_on_github(stack: &Stack, client: &Connection) -> (Workspace, Session) {
     let made = stack.workspace(client);
     wait_for_address(client);
     made
 }
 
 /// Once a repository's record has the address its worker read.
-pub(crate) fn wait_for_address(client: &Client) {
+pub(crate) fn wait_for_address(client: &Connection) {
     wait_until("the repository's address", || {
         client.records().unwrap().repos.iter().any(|repo| repo.origin.url().is_some())
     });

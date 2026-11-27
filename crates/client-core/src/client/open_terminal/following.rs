@@ -11,7 +11,7 @@ use super::asking::{self, Waiting};
 use super::given::{Given, Queue};
 use super::window::{Ask, Pointer, Replied, SelectBy, Window};
 use crate::client::follow::{Carried, Following, Source};
-use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
+use crate::client::{ClientError, Connection, FollowError, Result, Subscription, SubscriptionItem};
 use crate::drawn::{Frame, Rgb};
 use protocol::client::subscriptions::Follow;
 
@@ -47,12 +47,12 @@ impl OpenTerminal {
     /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub, on `connection`, or on the
     /// first it's carried on to if there's none yet. It's taken to be shown until [`OpenTerminal::set_shown`] says
     /// otherwise. A view opens one from its [`Hub`](crate::Hub), which carries it on to each new connection.
-    pub(crate) fn start(connection: Option<&Client>, id: &TerminalId) -> Self {
+    pub(crate) fn start(connection: Option<&Connection>, id: &TerminalId) -> Self {
         Self::letting_go_after(connection, id, LET_GO_AFTER)
     }
 
     /// As [`OpenTerminal::start`], letting it go once it hasn't been shown for `after`.
-    pub(super) fn letting_go_after(connection: Option<&Client>, id: &TerminalId, after: Duration) -> Self {
+    pub(super) fn letting_go_after(connection: Option<&Connection>, id: &TerminalId, after: Duration) -> Self {
         let (waiting, replies) = flume::unbounded();
         let source =
             TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new(), let_go_after: after };
@@ -112,8 +112,8 @@ impl OpenTerminal {
     }
 
     /// A key, which the terminal's worker turns into what the program reads, by the modes it set, sent as
-    /// [`Client::terminal_typed`] sends it, once. It also takes the view back to the screen from wherever the history
-    /// is scrolled to. Nothing is sent before the first picture.
+    /// [`Connection::terminal_typed`] sends it, once. It also takes the view back to the screen from wherever the
+    /// history is scrolled to. Nothing is sent before the first picture.
     pub fn key(&self, press: KeyPress) {
         self.give(Given::Key(press));
     }
@@ -213,8 +213,8 @@ struct TerminalSource {
 impl Source for TerminalSource {
     type Held = Held;
 
-    fn resume(&mut self, client: &Client, held: &Mutex<Held>) -> Result<Subscription> {
-        let watched = client.follow(Follow::Terminal { id: self.id.clone() });
+    fn resume(&mut self, connection: &Connection, held: &Mutex<Held>) -> Result<Subscription> {
+        let watched = connection.follow(Follow::Terminal { id: self.id.clone() });
         // Its record has gone with its shell, which may have ended while there was no connection to hear it. The
         // window keeps what it showed.
         if watched.as_ref().is_err_and(ClientError::is_not_found) {
@@ -223,14 +223,14 @@ impl Source for TerminalSource {
         watched
     }
 
-    fn apply(&mut self, client: &Client, held: &Mutex<Held>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, connection: &Connection, held: &Mutex<Held>, item: SubscriptionItem) -> Result<bool> {
         let ended = match item {
             SubscriptionItem::TerminalPicture(picture) => {
                 let asks = self
                     .window
                     .take(*picture)
                     .map_err(|_| ClientError::Unexpected("a picture lacked rows the client didn't hold".to_string()))?;
-                self.send(Some(client), asks);
+                self.send(Some(connection), asks);
                 false
             }
             SubscriptionItem::Terminal(TerminalUpdate::Exited(_)) => true,
@@ -245,13 +245,13 @@ impl Source for TerminalSource {
         if ended {
             held.lock().ended = true;
         }
-        Ok(self.settle(Some(client), held) || ended)
+        Ok(self.settle(Some(connection), held) || ended)
     }
 
     /// What's given to the window changes it whether or not there's a connection, as the wheel scrolls through the
     /// rows it holds without one. What that would ask of the hub is dropped while there's none, as typing over one
     /// that's gone is.
-    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, connection: Option<&Connection>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
         Ok(self.settle(connection, held))
     }
 
@@ -269,7 +269,7 @@ impl Source for TerminalSource {
 impl TerminalSource {
     /// Does what views gave the window, in order, then builds the next frame if the view has taken the last, and
     /// anything has changed since. Returns whether it built one.
-    fn settle(&mut self, connection: Option<&Client>, held: &Mutex<Held>) -> bool {
+    fn settle(&mut self, connection: Option<&Connection>, held: &Mutex<Held>) -> bool {
         // Under one lock, so a view that gives something, then takes a frame, as it gives its colours, gets one with
         // what it gave in.
         let (given, wanted) = {
@@ -295,7 +295,7 @@ impl TerminalSource {
         true
     }
 
-    fn answer(&mut self, connection: Option<&Client>, given: Given) -> Vec<Ask> {
+    fn answer(&mut self, connection: Option<&Connection>, given: Given) -> Vec<Ask> {
         let window = &mut self.window;
         match given {
             Given::Key(press) => window.typed(Typed::Key(press)),
@@ -331,18 +331,18 @@ impl TerminalSource {
 
     /// Asks for the text of what's selected, for `reply`, which nothing is sent to while nothing is, or without a
     /// connection.
-    fn copy(&self, connection: Option<&Client>, reply: flume::Sender<String>) {
-        if let (Some(client), Some((numbering, range))) = (connection, self.window.selected()) {
-            let copy = Waiting::Copy { client: client.clone(), numbering, range, reply };
+    fn copy(&self, connection: Option<&Connection>, reply: flume::Sender<String>) {
+        if let (Some(connection), Some((numbering, range))) = (connection, self.window.selected()) {
+            let copy = Waiting::Copy { connection: connection.clone(), numbering, range, reply };
             let _ = self.waiting.send(copy);
         }
     }
 
     /// Sends what the window asked for. What can't be sent, as while there's no connection, is dropped, and the window
     /// is told, so it asks again for what it still lacks.
-    fn send(&mut self, connection: Option<&Client>, asks: Vec<Ask>) {
+    fn send(&mut self, connection: Option<&Connection>, asks: Vec<Ask>) {
         for ask in asks {
-            let sent = connection.map(|client| asking::send(client, &self.id, ask));
+            let sent = connection.map(|connection| asking::send(connection, &self.id, ask));
             match sent {
                 Some(Ok(Some(waiting))) => {
                     let _ = self.waiting.send(waiting);

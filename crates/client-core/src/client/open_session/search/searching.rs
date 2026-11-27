@@ -1,7 +1,7 @@
 use super::super::{View, read_range};
 use crate::client::follow::Teller;
 use crate::session_log::Position;
-use crate::{Client, ClientError, Result};
+use crate::{ClientError, Connection, Result};
 use parking_lot::Mutex;
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
@@ -102,7 +102,7 @@ pub(in super::super) struct Asking {
 
 /// A search on its thread.
 pub(in super::super) struct Job {
-    pub(super) client: Client,
+    pub(super) connection: Connection,
     pub(super) asking: Asking,
     pub(super) searches: Arc<Searches>,
     pub(super) progress: Arc<Mutex<Progress>>,
@@ -111,11 +111,16 @@ pub(in super::super) struct Job {
 }
 
 impl Job {
-    pub(in super::super) fn start(client: &Client, asking: Asking, searches: &Arc<Searches>, teller: Teller) -> Search {
+    pub(in super::super) fn start(
+        connection: &Connection,
+        asking: Asking,
+        searches: &Arc<Searches>,
+        teller: Teller,
+    ) -> Search {
         let progress = Arc::new(Mutex::new(Progress { searched: Searched::Underway, error: None }));
         let (sender, stretches) = flume::bounded(1);
         let job = Job {
-            client: client.clone(),
+            connection: connection.clone(),
             asking,
             searches: searches.clone(),
             progress: progress.clone(),
@@ -146,7 +151,7 @@ impl Job {
             if self.gone() {
                 return Ok(Searched::Underway);
             }
-            self.client.session_find(session_id, view.subagent(), needle.query())?
+            self.connection.session_find(session_id, view.subagent(), needle.query())?
         };
         // A search reads by place, so the places the hub names are the positions in the log.
         let positions: Vec<Position> = found.places.iter().copied().map(Position::of_place).collect();
@@ -154,7 +159,7 @@ impl Job {
             if self.gone() {
                 return Ok(Searched::Underway);
             }
-            let events = read_range(&self.client, session_id, view, range)?;
+            let events = read_range(&self.connection, session_id, view, range)?;
             // It waits here while the last one is still to be taken.
             if self.stretches.send(Stretch { events, holding }).is_err() {
                 return Ok(Searched::Underway);

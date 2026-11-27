@@ -5,9 +5,9 @@
 use protocol::client::github_apps::{self, GithubAppManifest, GithubManifestCode};
 use protocol::model::{GithubApp, GithubAppId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Asks the hub for the manifest of an app of your own called `name`, which sends the person back to
     /// `redirect_url` once they've made it on GitHub, for the client to send GitHub as it is. See
     /// [`github_apps::GithubAppManifestWrite`].

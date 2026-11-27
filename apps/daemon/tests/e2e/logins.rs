@@ -5,7 +5,7 @@
 
 #![cfg(test)]
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::event::EventBody;
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
@@ -13,7 +13,7 @@ use crate::accounts::{limits_of, log_out};
 use crate::carrying_on::restart;
 use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
-fn listed(client: &Client, id: &AccountId) -> Account {
+fn listed(client: &Connection, id: &AccountId) -> Account {
     client.records().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
 }
 
@@ -47,7 +47,7 @@ fn a_login_a_client_connects_is_kept_through_a_restart_until_its_disconnected() 
 }
 
 /// Connects a made-up Claude login, named Work.
-fn connect_work(client: &Client) -> Account {
+fn connect_work(client: &Connection) -> Account {
     client.account_connect(AgentKind::Claude, "Work", LoginToken::new("a-made-up-token"), None).unwrap()
 }
 

@@ -24,7 +24,7 @@
 
 use std::time::Duration;
 
-use desktop::app::{AppView, Connection, HubSource};
+use desktop::app::{AppView, HubSource, Linking};
 use desktop::checkout::{Checkout, built_from};
 use gpui_kit::SharedString;
 use gpui_kit::test::TestWindowExt as _;
@@ -55,7 +55,7 @@ fn main() {
             loop {
                 cx.background_executor().timer(Duration::from_millis(100)).await;
                 let ready = view.update(cx, |v: &mut AppView, cx| {
-                    if !matches!(v.connection(), Connection::Ready) {
+                    if !matches!(v.linking(), Linking::Ready) {
                         return false;
                     }
                     if let Some(name) = &wanted

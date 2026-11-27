@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use client_core::{Client, ClientError, Ended, HubAdmin};
+use client_core::{ClientError, Connection, Ended, HubAdmin};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, Request};
 use protocol::event::EventBody;
 use protocol::model::Seq;
@@ -63,7 +63,7 @@ fn a_hub_shows_its_status_and_stops_without_a_hello() {
 
     assert!(matches!(status, ReplyOutcome::Response(ClientResponse::HubStatus(s)) if s.pid == stack.hub_pid()));
     let stopped = connection.ask_unless_closed(2, r#"{"method":"hub_shutdown"}"#);
-    // It can stop before its reply gets out, which a client takes as done, as `Client::hub_shutdown` does.
+    // It can stop before its reply gets out, which a client takes as done, as `Connection::hub_shutdown` does.
     assert!(matches!(stopped, None | Some(ReplyOutcome::Response(ClientResponse::Ok))), "{stopped:?}");
     stack.hub.take().unwrap().wait().unwrap();
 }
@@ -97,7 +97,7 @@ fn a_directory_the_user_pointed_us_at_keeps_its_permissions() {
     command.env("ROUNDHOUSE_HOME", &shared);
     let mut hub = command.spawn().unwrap();
     let socket = shared.join("hub.sock");
-    wait_until("the hub", || Client::connect(&socket, "test").is_ok());
+    wait_until("the hub", || Connection::connect(&socket, "test").is_ok());
     assert_eq!(mode(&shared), 0o755);
     assert_eq!(mode(&socket), 0o600);
     assert_eq!(mode(&shared.join("hub.db")), 0o600);

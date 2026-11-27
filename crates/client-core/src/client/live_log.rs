@@ -9,7 +9,7 @@ use protocol::model::{Seq, Session, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 
 use super::follow::{Carried, Following, Source};
-use super::{Client, Result, Subscription, SubscriptionItem};
+use super::{Connection, Result, Subscription, SubscriptionItem};
 
 /// One of what the hub sent, in order.
 #[derive(Clone, Debug, PartialEq)]
@@ -40,7 +40,7 @@ pub struct LiveLog {
 impl LiveLog {
     /// Starts following `session` from the event after its last as it's recorded here,
     /// on `connection`, or on the first its [`Hub`](crate::Hub) carries it on to if there's none yet.
-    pub(crate) fn start(connection: Option<&Client>, session: &Session) -> Self {
+    pub(crate) fn start(connection: Option<&Connection>, session: &Session) -> Self {
         let source = LiveSource { id: session.id.clone(), next: session.last_seq.next() };
         let follow = Following::start(connection, Items::default(), move || source);
         follow.wake();
@@ -72,11 +72,11 @@ struct LiveSource {
 impl Source for LiveSource {
     type Held = Items;
 
-    fn resume(&mut self, client: &Client, _: &Mutex<Items>) -> Result<Subscription> {
-        client.follow_session(&self.id, self.next)
+    fn resume(&mut self, connection: &Connection, _: &Mutex<Items>) -> Result<Subscription> {
+        connection.follow_session(&self.id, self.next)
     }
 
-    fn apply(&mut self, _: &Client, held: &Mutex<Items>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, held: &Mutex<Items>, item: SubscriptionItem) -> Result<bool> {
         let mut held = held.lock();
         let item = match item {
             SubscriptionItem::Event(event) => {
@@ -100,7 +100,7 @@ impl Source for LiveSource {
         Ok(true)
     }
 
-    fn asked(&mut self, _: Option<&Client>, _: &Mutex<Items>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, _: Option<&Connection>, _: &Mutex<Items>, _: &dyn Fn()) -> Result<bool> {
         Ok(false)
     }
 }

@@ -1,5 +1,5 @@
-//! A connection that sends frames as written in a test, for what `Client` has no way to send, and keeps what the hub
-//! sends on it.
+//! A connection that sends frames as written in a test, for what `Connection` has no way to send, and keeps what the
+//! hub sends on it.
 
 use std::io::{BufRead as _, BufReader, ErrorKind, Write as _};
 use std::os::unix::net::UnixStream;

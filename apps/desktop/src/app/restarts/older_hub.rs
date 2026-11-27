@@ -1,4 +1,4 @@
-use super::super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source};
+use super::super::{AppView, ConnectionFailure, Linking, Unconnected, hub_source};
 use super::{asking, said};
 use gpui_kit::{App, Context, Task};
 use protocol::client::HubStatus;
@@ -127,7 +127,7 @@ impl AppView {
     /// Has the app be connecting. A workspace already on screen stays there, as `view.rs` draws it, holding what it
     /// would send until the hub is back.
     pub(in super::super) fn show_connecting(&mut self, cx: &mut Context<Self>) {
-        self.set_connection(Connection::Connecting, cx);
+        self.set_linking(Linking::Connecting, cx);
         cx.notify();
     }
 

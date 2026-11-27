@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use client_core::Client;
+use client_core::Connection;
 use hub::Timers;
 
 use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, signal, wait_for_turn_end, wait_until};
@@ -17,7 +17,7 @@ fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     let exe = stack.path("roundhoused-copy");
     process::testing::install_program(crate::support::daemon(), &exe).unwrap();
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap().into());
-    wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub", || Connection::connect(&stack.socket(), "test").is_ok());
     exe
 }
 
@@ -37,7 +37,7 @@ fn children_of(parent: u32) -> Vec<u32> {
 
 /// Kills what the hub runs to reach each of its workers, and waits until the hub has noticed. A worker it reached
 /// that way stops too, since this hub didn't ask it to keep running without one.
-fn kill_workers(stack: &Stack, client: &Client) {
+fn kill_workers(stack: &Stack, client: &Connection) {
     for pid in children_of(stack.hub_pid()) {
         signal(pid, libc::SIGKILL);
     }
@@ -99,7 +99,7 @@ fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() 
     replace_with_script(&exe, "exec sleep 1000");
     for id in [hung.id.clone(), also_hung.id.clone()] {
         let socket = stack.socket();
-        std::thread::spawn(move || Client::connect(&socket, "test").unwrap().workspace_status(&id).map(drop));
+        std::thread::spawn(move || Connection::connect(&socket, "test").unwrap().workspace_status(&id).map(drop));
     }
     // Both starts are under way at once, so neither waits for the other.
     wait_until("both of them to be starting a worker, beside the one that's fine", || {
@@ -107,10 +107,10 @@ fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() 
     });
 
     let socket = stack.socket();
-    let status = answer(move || Client::connect(&socket, "test").unwrap().hub_status().unwrap());
+    let status = answer(move || Connection::connect(&socket, "test").unwrap().hub_status().unwrap());
     assert!(status.is_some(), "hub status waited on one workspace's worker");
     let (socket, fine_id) = (stack.socket(), fine.id.clone());
-    let status = answer(move || Client::connect(&socket, "test").unwrap().workspace_status(&fine_id).unwrap());
+    let status = answer(move || Connection::connect(&socket, "test").unwrap().workspace_status(&fine_id).unwrap());
     assert!(status.is_some(), "another workspace waited on it");
     // So the workers that never answer don't outlive the test.
     kill_workers(&stack, &client);
@@ -130,7 +130,7 @@ fn a_worker_that_never_answers_its_hello_is_given_up_on_and_ended() {
     // The next worker to start never says hello.
     replace_with_script(&exe, "exec sleep 1000");
     let (socket, hung_id) = (stack.socket(), hung.id.clone());
-    let status = answer(move || Client::connect(&socket, "test").unwrap().workspace_status(&hung_id).map(drop));
+    let status = answer(move || Connection::connect(&socket, "test").unwrap().workspace_status(&hung_id).map(drop));
 
     let err = status.expect("its start never gave up on it").unwrap_err();
     assert!(err.to_string().contains("didn't answer within"), "{err}");

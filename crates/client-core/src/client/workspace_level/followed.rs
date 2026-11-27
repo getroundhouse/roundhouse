@@ -6,7 +6,7 @@ use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
 use protocol::model::{Level, WorkspaceId};
 
-use crate::client::Client;
+use crate::client::Connection;
 use crate::client::at_level::{AtLevel, LevelSource};
 use crate::client::follow::{Following, Reach};
 use crate::records::HubRecords;
@@ -77,7 +77,7 @@ pub(in crate::client) struct Workspaces {
 impl Workspaces {
     /// Starts following, on a thread of its own, with nothing followed until a handle is asked for. What's sent goes
     /// into `records`.
-    pub(in crate::client) fn start(connection: Option<&Client>, records: Reach<HubRecords>) -> Self {
+    pub(in crate::client) fn start(connection: Option<&Connection>, records: Reach<HubRecords>) -> Self {
         let follow = Following::start(connection, Wanted::default(), move || LevelSource::<WorkspaceId>::new(records));
         Workspaces { follow }
     }
@@ -90,8 +90,8 @@ impl Workspaces {
     }
 
     /// Carries on on a new connection, following again every workspace a handle is kept on.
-    pub(in crate::client) fn reconnect(&self, client: &Client) {
-        self.follow.reconnect(client);
+    pub(in crate::client) fn reconnect(&self, connection: &Connection) {
+        self.follow.reconnect(connection);
     }
 }
 

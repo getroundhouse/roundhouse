@@ -17,7 +17,7 @@ use crate::client::at_level::LevelSource;
 use crate::client::follow::{Following, Source as _};
 use crate::records::HubRecords;
 use crate::stand_in_hub::{self, Does, refusing_every_start, starts, subscribed};
-use crate::{Client, RecordsFeed, SubscriptionItem};
+use crate::{Connection, RecordsFeed, SubscriptionItem};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -51,7 +51,7 @@ impl Asked {
 
 /// A hub on `socket` that keeps what it's asked to follow, lists none of its records, and answers each issue or pull
 /// request it's asked to follow with it missing, as a hub that has read them sends.
-fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Client, Asked) {
+fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Connection, Asked) {
     let asked = Asked::default();
     let heard = asked.clone();
     let client = stand_in_hub::connect(socket, move |request| {
@@ -151,7 +151,7 @@ fn a_refused_start_is_asked_for_again_only_once_what_s_shown_changes() {
     let heard = stand_in_hub::listen(&socket, |request| {
         Does::Answers(Box::new(refusing_every_start(&request, ErrorCode::NotFound, "a stand-in has no issues")))
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let records = Following::unstarted(HubRecords::default());
     let (held, mut source) = (Mutex::new(GithubHeld::default()), LevelSource::<ReferenceAsk>::new(records.reach()));
     held.lock().add(1);
@@ -211,7 +211,7 @@ fn what_s_held_of_a_chip_stays_through_a_new_connection_until_its_level_lists_it
     let _heard = stand_in_hub::listen(&socket, |_| {
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default()))))
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let records = Following::unstarted(HubRecords::default());
     let (held, mut source) = (Mutex::new(GithubHeld::default()), LevelSource::<ReferenceAsk>::new(records.reach()));
     held.lock().add(1);

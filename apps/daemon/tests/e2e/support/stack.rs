@@ -2,7 +2,7 @@
 
 use super::examples;
 use super::processes::Hub;
-use client_core::{Client, OnSocket, Subscription, SubscriptionItem};
+use client_core::{Connection, OnSocket, Subscription, SubscriptionItem};
 use examples::fake_agent;
 use hub::Timers;
 use local_hub::Daemon;
@@ -137,12 +137,12 @@ impl Stack {
                     String::from_utf8_lossy(own)
                 );
             }
-            Client::connect(&socket, "test").is_ok()
+            Connection::connect(&socket, "test").is_ok()
         });
     }
 
-    pub(crate) fn client(&self) -> Client {
-        Client::connect(&self.socket(), "test").unwrap()
+    pub(crate) fn client(&self) -> Connection {
+        Connection::connect(&self.socket(), "test").unwrap()
     }
 
     /// This stack's hub as a view holds it, once it has caught up on the hub's records, connecting again by itself
@@ -157,16 +157,16 @@ impl Stack {
         self.hub.as_ref().unwrap().id()
     }
 
-    pub(crate) fn workspace(&self, client: &Client) -> (Workspace, Session) {
+    pub(crate) fn workspace(&self, client: &Connection) -> (Workspace, Session) {
         self.workspace_with(client, Settings::default())
     }
 
     /// A workspace, with a chat in it that's planning, so its agent asks before a call that changes anything.
-    pub(crate) fn workspace_planning(&self, client: &Client) -> (Workspace, Session) {
+    pub(crate) fn workspace_planning(&self, client: &Connection) -> (Workspace, Session) {
         self.workspace_with(client, in_mode(protocol::fixtures::plan_mode()))
     }
 
-    pub(super) fn workspace_with(&self, client: &Client, options: Settings) -> (Workspace, Session) {
+    pub(super) fn workspace_with(&self, client: &Connection, options: Settings) -> (Workspace, Session) {
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
         let session = client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap();
@@ -245,7 +245,7 @@ pub(crate) fn wait_while_progressing<P: PartialEq>(
     }
 }
 
-pub(crate) fn read_all(client: &Client, session_id: &SessionId) -> Vec<SessionEvent> {
+pub(crate) fn read_all(client: &Connection, session_id: &SessionId) -> Vec<SessionEvent> {
     let mut events = Vec::new();
     let mut from = Seq::FIRST;
     loop {
@@ -259,19 +259,19 @@ pub(crate) fn read_all(client: &Client, session_id: &SessionId) -> Vec<SessionEv
     }
 }
 
-pub(crate) fn wait_for_status(client: &Client, session_id: &SessionId, status: SessionStatus) {
+pub(crate) fn wait_for_status(client: &Connection, session_id: &SessionId, status: SessionStatus) {
     wait_until(&format!("session to be {status:?}"), || client.session_get(session_id).unwrap().status == status);
 }
 
 /// Waits until the agent has finished the turn, and everything it said is in the log.
-pub(crate) fn wait_for_turn_end(client: &Client, session_id: &SessionId, count: usize) -> Vec<SessionEvent> {
+pub(crate) fn wait_for_turn_end(client: &Connection, session_id: &SessionId, count: usize) -> Vec<SessionEvent> {
     wait_for_turn_end_while_progressing(client, session_id, count, || ())
 }
 
 /// Like `wait_for_turn_end`, but giving up only once `progress` stops changing, as `wait_while_progressing`
 /// does.
 pub(crate) fn wait_for_turn_end_while_progressing<P: PartialEq>(
-    client: &Client,
+    client: &Connection,
     session_id: &SessionId,
     count: usize,
     progress: impl FnMut() -> P,
@@ -373,11 +373,11 @@ pub(crate) fn commit_settings(stack: &Stack, toml: &str) {
 }
 
 /// The workspace as the hub has it now, archived or not.
-pub(crate) fn workspace(client: &Client, id: &WorkspaceId) -> protocol::model::Workspace {
+pub(crate) fn workspace(client: &Connection, id: &WorkspaceId) -> protocol::model::Workspace {
     client.workspace_list(true).unwrap().into_iter().find(|w| &w.id == id).unwrap()
 }
 
-pub(crate) fn wait_for_setup(client: &Client, id: &WorkspaceId) -> protocol::model::SetupStatus {
+pub(crate) fn wait_for_setup(client: &Connection, id: &WorkspaceId) -> protocol::model::SetupStatus {
     let mut status = protocol::model::SetupStatus::Running;
     wait_until("setup to finish", || {
         status = workspace(client, id).setup;
@@ -387,7 +387,7 @@ pub(crate) fn wait_for_setup(client: &Client, id: &WorkspaceId) -> protocol::mod
 }
 
 /// The records of the session `id`, its subagents, proposals and replies heard, as following it lists them first.
-pub(crate) fn session_records(client: &Client, id: &SessionId) -> SessionRecords {
+pub(crate) fn session_records(client: &Connection, id: &SessionId) -> SessionRecords {
     let followed = client.follow_session(id, Seq::new(1)).unwrap();
     match followed.items.recv_timeout(super::TIMEOUT) {
         Ok(SubscriptionItem::Listed(listed)) => match *listed {

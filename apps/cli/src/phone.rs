@@ -4,7 +4,7 @@ use std::io::IsTerminal;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, bail};
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Connection};
 use protocol::client::ErrorCode;
 use qrcode::QrCode;
 use qrcode::render::unicode::Dense1x2;
@@ -12,7 +12,7 @@ use qrcode::render::unicode::Dense1x2;
 use crate::args::PhoneCmd;
 use crate::run::short;
 
-pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Result<()> {
+pub(crate) fn phone_command(client: &Connection, command: PhoneCmd) -> anyhow::Result<()> {
     match command {
         PhoneCmd::Pair => pair(client),
         PhoneCmd::List => {
@@ -43,7 +43,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
     }
 }
 
-fn pair(client: &Client) -> anyhow::Result<()> {
+fn pair(client: &Connection) -> anyhow::Result<()> {
     let pairing = client.pairing_start()?;
     println!("Scan this on your phone, or paste the link into another desktop's hub switcher:\n");
     println!("{}\n", qr_code(&pairing.link.to_string())?);

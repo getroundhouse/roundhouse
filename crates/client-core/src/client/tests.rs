@@ -21,7 +21,7 @@ fn a_reply_this_client_cannot_read_fails_the_call_rather_than_hanging() {
     let socket = dir.path().join("hub.sock");
     let unreadable = r#"{"frame":"reply","id":2,"response":{"result":"from_a_newer_hub"}}"#;
     StandIn::of_build("older").listen(&socket, |_| Does::Writes(unreadable.to_string()));
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
 
     let (finished, outcome) = flume::bounded(1);
     std::thread::spawn(move || finished.send(client.hub_status()));
@@ -60,7 +60,7 @@ fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_li
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let asked = start_hub_that_floods_a_subscription(&socket);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let subscription = client.follow(subscriptions::Follow::Hub).unwrap();
 
     let mut asked = std::iter::from_fn(|| asked.recv_timeout(Duration::from_secs(10)).ok());
@@ -86,7 +86,7 @@ fn a_hub_that_chose_another_version_is_refused() {
     let newer = HelloReply { protocol_version: CLIENT_PROTOCOL_VERSION + 1, hub_version: "a".into() };
     StandIn::greeting(ClientResponse::Hello(newer)).listen(&socket, |_| Does::Nothing);
 
-    let connected = Client::connect(&socket, "test");
+    let connected = Connection::connect(&socket, "test");
 
     let error = connected.err().unwrap();
     assert!(error.is_version_mismatch(), "{error:?}");
@@ -130,7 +130,7 @@ fn a_write_that_fails_ends_the_connection() {
     let (_hub, _) = listener.accept().unwrap();
     let reader = Box::new(stream.try_clone().unwrap());
     let transport = transport::Transport { reader, writer: Box::new(Gone), closer: transport::Closer::tcp(stream) };
-    let client = Client::from_transport(transport).unwrap();
+    let client = Connection::from_transport(transport).unwrap();
 
     let typed = client.terminal_typed(&"t".into(), Typed::Text { text: "x".into() });
 
@@ -148,9 +148,9 @@ fn a_connection_knows_the_device_its_hello_named() {
     stand_in_hub::listen(&off, |_| Does::Nothing);
     let device = protocol::model::ClientDevice { id: "mac".into(), name: "Mac Studio".into() };
 
-    let client = Client::connect(&on, Introduction::on("desktop", device)).unwrap();
+    let client = Connection::connect(&on, Introduction::on("desktop", device)).unwrap();
     assert_eq!(client.device().map(protocol::model::DeviceId::as_str), Some("mac"));
-    assert_eq!(Client::connect(&off, "cli").unwrap().device(), None);
+    assert_eq!(Connection::connect(&off, "cli").unwrap().device(), None);
 }
 
 /// A subscription that ends while a start it asked for waits for the hub's reply, as one dropped or fallen behind does,
@@ -167,7 +167,7 @@ fn a_start_answered_after_its_subscription_ended_is_stopped() {
         let answered = Does::Answers(Box::new(ReplyOutcome::Response(started)));
         if subscribe.start.is_empty() { answered } else { Does::After(opened.clone(), Box::new(answered)) }
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let (subscription, _) = client.follow_all(Vec::new()).unwrap();
     let (changing, starting) = (subscription.changing(), client.clone());
     std::thread::spawn(move || changing.follow_only(&starting, vec![subscriptions::Follow::Hub]));

@@ -10,7 +10,7 @@ use protocol::client::{ApiError, ErrorCode, HubFrame, ReplyOutcome};
 
 use crate::link::{Connect, Lost, Refused};
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 
 pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
 /// Longer than any test runs, so the link tries again only when it's asked to.
@@ -18,10 +18,10 @@ pub(super) const NEVER: Duration = Duration::from_secs(600);
 
 /// Each try gets the next of these, in turn, and fails as a hub that can't be reached does once they've all been tried.
 #[derive(Clone)]
-pub(super) struct Tries(Arc<Mutex<Vec<Result<Client, ClientError>>>>);
+pub(super) struct Tries(Arc<Mutex<Vec<Result<Connection, ClientError>>>>);
 
 impl Tries {
-    pub(super) fn of(each: Vec<Result<Client, ClientError>>) -> Tries {
+    pub(super) fn of(each: Vec<Result<Connection, ClientError>>) -> Tries {
         Tries(Arc::new(Mutex::new(each.into_iter().rev().collect())))
     }
 }
@@ -30,7 +30,7 @@ impl Connect for Tries {
     type With = ();
     type Failure = String;
 
-    fn connect(&mut self) -> Result<(Client, ()), Refused<String>> {
+    fn connect(&mut self) -> Result<(Connection, ()), Refused<String>> {
         match self.0.lock().pop().unwrap_or(Err(ClientError::Disconnected)) {
             Ok(client) => Ok((client, ())),
             Err(error) => Err(Refused::by(&error, error.to_string())),

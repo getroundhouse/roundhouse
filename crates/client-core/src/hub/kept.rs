@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use crate::client::{Carried, Lasting};
 use protocol::model::DeviceId;
 
-use crate::{Client, Drafts, RecordsFeed};
+use crate::{Connection, Drafts, RecordsFeed};
 
 /// What a [`Link`](crate::link::Link) keeps for every [`Hub`](super::Hub) it gives out, over each connection it makes.
 pub(crate) struct Kept {
@@ -33,7 +33,7 @@ pub(crate) struct Kept {
     /// change with its connection, so it holds once that connection has gone.
     on_this_machine: AtomicBool,
     /// The connection, while there's one that has caught up on the records, which is the only one asked anything.
-    ready: Mutex<Option<Client>>,
+    ready: Mutex<Option<Connection>>,
     /// How many connections have caught up.
     round: AtomicU64,
     opened: Mutex<Opened>,
@@ -43,7 +43,7 @@ pub(crate) struct Kept {
 #[derive(Default)]
 struct Opened {
     /// Whether or not it has caught up, since what's followed starts again from where it stands on it.
-    connection: Option<Client>,
+    connection: Option<Connection>,
     each: Vec<Box<dyn Carried>>,
 }
 
@@ -104,7 +104,7 @@ impl Kept {
         told
     }
 
-    pub(crate) fn ready(&self) -> Option<Client> {
+    pub(crate) fn ready(&self) -> Option<Connection> {
         self.ready.lock().clone()
     }
 
@@ -112,25 +112,25 @@ impl Kept {
         self.round.load(Ordering::SeqCst)
     }
 
-    /// Carries the records on to `client`, a new connection, then the drafts, then everything open, since what follows
+    /// Carries the records on to `connection`, a new one, then the drafts, then everything open, since what follows
     /// a session takes what it's sent into the records, as [`RecordsFeed::reconnect`] says. Returns the records.
-    pub(crate) fn connected(&self, client: &Client) -> RecordsFeed {
-        client.share(&self.lasting);
-        client.hub_version().clone_into(&mut self.hub_version.lock());
-        self.feed.reconnect(client);
-        self.drafts.reconnect(client);
-        *self.device.lock() = client.device().cloned();
+    pub(crate) fn connected(&self, connection: &Connection) -> RecordsFeed {
+        connection.share(&self.lasting);
+        connection.hub_version().clone_into(&mut self.hub_version.lock());
+        self.feed.reconnect(connection);
+        self.drafts.reconnect(connection);
+        *self.device.lock() = connection.device().cloned();
         self.connected_once.store(true, Ordering::SeqCst);
-        self.on_this_machine.store(client.hub_on_this_machine(), Ordering::SeqCst);
+        self.on_this_machine.store(connection.hub_on_this_machine(), Ordering::SeqCst);
         let mut opened = self.opened.lock();
-        opened.connection = Some(client.clone());
-        opened.each.retain(|open| open.carry_on(client));
+        opened.connection = Some(connection.clone());
+        opened.each.retain(|open| open.carry_on(connection));
         self.feed.clone()
     }
 
     /// The connection that has caught up, or `None` while there isn't one. One that has caught up where there was none
     /// starts a new round.
-    pub(crate) fn set_ready(&self, ready: Option<Client>) {
+    pub(crate) fn set_ready(&self, ready: Option<Connection>) {
         let mut was = self.ready.lock();
         let new_round = was.is_none() && ready.is_some();
         if new_round {
@@ -149,7 +149,7 @@ impl Kept {
     /// to carry what's open on to it, so nothing opened as one comes is left on the one before.
     pub(crate) fn open<T>(
         &self,
-        start: impl FnOnce(Option<&Client>) -> T,
+        start: impl FnOnce(Option<&Connection>) -> T,
         carried: impl FnOnce(&T) -> Box<dyn Carried>,
     ) -> T {
         let mut opened = self.opened.lock();

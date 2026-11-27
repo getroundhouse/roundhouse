@@ -15,7 +15,7 @@ use protocol::versions::Versions;
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// Longer than any test runs, so a test that passes didn't wait.
@@ -25,13 +25,13 @@ const NEVER: Duration = Duration::from_secs(600);
 /// that can't be reached does.
 #[derive(Clone, Default)]
 struct Tries {
-    next: Arc<Mutex<Vec<Result<Client, ClientError>>>>,
+    next: Arc<Mutex<Vec<Result<Connection, ClientError>>>>,
     /// When each try was made, and what was done first, as `after` said.
     made: Arc<Mutex<Vec<(Instant, &'static str)>>>,
 }
 
 impl Tries {
-    fn of(each: Vec<Result<Client, ClientError>>) -> Tries {
+    fn of(each: Vec<Result<Connection, ClientError>>) -> Tries {
         let tries = Tries::default();
         tries.next.lock().extend(each.into_iter().rev());
         tries
@@ -46,7 +46,7 @@ impl Connect for Tries {
     type With = usize;
     type Failure = String;
 
-    fn connect(&mut self) -> Result<(Client, usize), Refused<String>> {
+    fn connect(&mut self) -> Result<(Connection, usize), Refused<String>> {
         self.made.lock().push((Instant::now(), "try"));
         let which = self.count();
         match self.next.lock().pop().unwrap_or(Err(ClientError::Disconnected)) {
@@ -62,7 +62,7 @@ impl Connect for Tries {
 
 /// A stand-in hub on `socket` that sends its records, and goes when it's asked for its repositories, which a test
 /// asks for to lose the connection.
-fn hub(socket: &Path) -> Client {
+fn hub(socket: &Path) -> Connection {
     stand_in_hub::connect(socket, |request| {
         let answer = if let ClientRequest::Subscribe(subscribe) = &request {
             return stand_in_hub::subscribed(subscribe, |subscription_id, _| {
@@ -81,7 +81,7 @@ fn hub(socket: &Path) -> Client {
 
 /// A stand-in hub on `socket` that takes a client following it, and goes as it's next asked something, before it has
 /// said where its records stand, so before the link has caught up on them.
-fn hub_that_goes_as_it_lists(socket: &Path) -> Client {
+fn hub_that_goes_as_it_lists(socket: &Path) -> Connection {
     stand_in_hub::connect(socket, |request| {
         let ClientRequest::Subscribe(subscribe) = &request else { return Does::HangsUp };
         stand_in_hub::subscribed(subscribe, |_, _| Vec::new())
@@ -89,7 +89,7 @@ fn hub_that_goes_as_it_lists(socket: &Path) -> Client {
 }
 
 /// A stand-in hub on `socket` that never answers, so a link never catches up on it.
-fn silent_hub(socket: &Path) -> Client {
+fn silent_hub(socket: &Path) -> Connection {
     stand_in_hub::connect(socket, |_| Does::Nothing)
 }
 
@@ -247,7 +247,7 @@ fn what_comes_before_connecting_again_failing_waits_for_a_person() {
 /// A stand-in hub on `socket` that lists its records once `list` is sent something, and sends nothing of any other
 /// level, such as a terminal, which a test opens to hear when what's open has been carried on to it. With everything it
 /// hears.
-fn hub_listing_after(socket: &Path, list: flume::Receiver<()>) -> (Client, flume::Receiver<ClientRequest>) {
+fn hub_listing_after(socket: &Path, list: flume::Receiver<()>) -> (Connection, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, move |request| {
         let ClientRequest::Subscribe(subscribe) = &request else {
             return Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"))));
@@ -260,7 +260,7 @@ fn hub_listing_after(socket: &Path, list: flume::Receiver<()>) -> (Client, flume
         });
         if of_the_hub { Does::After(list.clone(), Box::new(listed)) } else { listed }
     });
-    (Client::connect(socket, "test").unwrap(), heard)
+    (Connection::connect(socket, "test").unwrap(), heard)
 }
 
 /// Whether `request` starts following `follow`.
@@ -290,7 +290,7 @@ fn a_connection_made_while_the_one_before_catches_up_is_caught_up_on_only_once_i
             Does::Nothing
         }
     });
-    let first = Client::connect(&first_socket, "test").unwrap();
+    let first = Connection::connect(&first_socket, "test").unwrap();
     let (list, listed) = flume::bounded(1);
     let (next, next_heard) = hub_listing_after(&dir.path().join("next.sock"), listed);
     let link = Link::start_waiting(Tries::of(vec![Ok(first), Ok(next)]), Waits::retrying(NEVER, NEVER));

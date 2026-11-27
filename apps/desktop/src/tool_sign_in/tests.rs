@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use client_core::stand_in_hub::{self, Does};
-use client_core::{Client, Hub};
+use client_core::{Connection, Hub};
 use gpui_kit::{AppContext as _, Entity, TestAppContext};
 use parking_lot::Mutex;
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInPage};
@@ -52,7 +52,7 @@ fn stand_in(
     heard: &Heard,
     starts: impl Fn() -> Does + Send + 'static,
     finishes: impl Fn() -> Does + Send + 'static,
-) -> Client {
+) -> Connection {
     let heard = heard.clone();
     stand_in_hub::connect(&dir.path().join(name), move |request| {
         let (asked, does) = match request {

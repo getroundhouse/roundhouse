@@ -7,7 +7,7 @@ use protocol::model::{OpenApproval, Seq, Session};
 
 use super::super::View;
 use super::{LAST_SEQ, answered_simply, session, start_hub_answering, until};
-use crate::Client;
+use crate::Connection;
 use crate::session_log::RecordedApprovals;
 
 /// Pages before the newest two, which a view opened at the end doesn't load.
@@ -37,7 +37,7 @@ fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {
     let session = Session { open_approvals: waiting, ..session() };
     let recorded = RecordedApprovals::of(&session);
 
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session, View::Own);
 

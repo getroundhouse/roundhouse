@@ -13,7 +13,7 @@ use protocol::model::{
 
 use crate::fake_hub::{World, serve};
 use crate::records::{HubRecords, Snapshot};
-use crate::{Client, FollowedWorkspace, RecordsFeed};
+use crate::{Connection, FollowedWorkspace, RecordsFeed};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -28,7 +28,7 @@ fn twelve() -> ReferenceAsk {
 /// A world with the workspace `elm`, whose pull request is #7, open with a check running and its worktree a commit
 /// ahead, the workspace `oak`, where GitHub showed no repository, and issue 12, with a client of a hub that serves it,
 /// and the directory its socket is in, which goes when the test ends.
-fn served() -> (tempfile::TempDir, Client) {
+fn served() -> (tempfile::TempDir, Connection) {
     let mut world = World::default();
     let repo = world.repo("aspen");
     let elm = world.workspace(&repo, "elm");
@@ -44,7 +44,7 @@ fn served() -> (tempfile::TempDir, Client) {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub");
     serve(&socket, world);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     (dir, client)
 }
 
@@ -61,7 +61,7 @@ fn unseen() -> RepositoryUnseen {
 
 /// What a view reads of each, once the hub has said it all, with every workspace followed at its own level, as the
 /// handles on them say, the view that showed them, and the feed they read.
-fn read_once_said(client: &Client) -> (Read, RecordsFeed, (Vec<FollowedWorkspace>, crate::GithubView)) {
+fn read_once_said(client: &Connection) -> (Read, RecordsFeed, (Vec<FollowedWorkspace>, crate::GithubView)) {
     let records = RecordsFeed::start(client);
     waiting::thread::until(TIMEOUT, "the hub's records", || records.connected());
     let feed = records.github();

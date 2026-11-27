@@ -27,13 +27,13 @@ impl Hub {
         from: Option<&str>,
         listed: Option<&FileVersion>,
     ) -> Result<Option<FileDiff>> {
-        let client = self.ready()?;
+        let connection = self.ready()?;
         'read: for _ in 0..=MOST_READS_AGAIN {
-            let first = client.workspace_file_diff(id, at, from, 0)?;
+            let first = connection.workspace_file_diff(id, at, from, 0)?;
             let FileDiffBody::Patch { patch: mut whole, mut next_line } = first.body else { return Ok(Some(first)) };
             let known = first.version.is_some() || listed.is_none();
             while let Some(line) = next_line {
-                let page = client.workspace_file_diff(id, at, from, line)?;
+                let page = connection.workspace_file_diff(id, at, from, line)?;
                 let FileDiffBody::Patch { patch, next_line: next } = page.body else { continue 'read };
                 if !known || page.version != first.version {
                     continue 'read;

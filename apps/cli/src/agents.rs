@@ -1,6 +1,6 @@
 //! What each kind of agent the hub runs is called and offers, as its adapter describes it.
 
-use client_core::{Agents, Client};
+use client_core::{Agents, Connection};
 use protocol::capability::settings::{Effort, ModelOffer};
 use protocol::model::{AgentDescription, AgentKind};
 
@@ -8,7 +8,7 @@ use crate::modes::mode_name;
 use crate::session::effort_name;
 
 /// Prints each kind the hub describes, a few lines each, with what a chat starts with marked.
-pub(crate) fn print_agents(client: &Client) -> anyhow::Result<()> {
+pub(crate) fn print_agents(client: &Connection) -> anyhow::Result<()> {
     let agents = Agents::read(client)?;
     if agents.described().is_empty() {
         anyhow::bail!("the hub doesn't describe its agents: it refused to, or its reply couldn't be read");

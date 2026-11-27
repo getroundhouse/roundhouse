@@ -9,7 +9,7 @@ use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
 
 use super::{Following, Source};
-use crate::client::{Client, Result, Subscription, SubscriptionItem};
+use crate::client::{Connection, Result, Subscription, SubscriptionItem};
 use crate::stand_in_hub::{Does, listen, subscribed};
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -37,16 +37,16 @@ struct Made {
 impl Source for Made {
     type Held = Wanted;
 
-    fn resume(&mut self, client: &Client, _: &Mutex<Wanted>) -> Result<Subscription> {
+    fn resume(&mut self, client: &Connection, _: &Mutex<Wanted>) -> Result<Subscription> {
         self.seen.lock().push(Seen::Resumed);
         client.follow(Follow::Terminal { id: "t".into() })
     }
 
-    fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
         Ok(false)
     }
 
-    fn asked(&mut self, connection: Option<&Client>, _: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, connection: Option<&Connection>, _: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
         self.seen.lock().push(Seen::Asked { connected: connection.is_some() });
         Ok(false)
     }
@@ -99,12 +99,12 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     let (first_asked, second_asked) = (start_hub(&first), start_hub(&second));
     let seen = Arc::new(Mutex::new(Vec::new()));
     let made = Made { seen: seen.clone() };
-    let follow = Following::start(Some(&Client::connect(&first, "test").unwrap()), Wanted::default(), move || made);
+    let follow = Following::start(Some(&Connection::connect(&first, "test").unwrap()), Wanted::default(), move || made);
     assert!(starts(&next(&first_asked, "the first watch")));
 
     want_until(&follow, Some(Instant::now() + Duration::from_millis(50)));
     let let_go = next(&first_asked, "letting go once it wasn't wanted");
-    follow.reconnect(&Client::connect(&second, "test").unwrap());
+    follow.reconnect(&Connection::connect(&second, "test").unwrap());
     waiting::thread::until(WAIT, "the new connection was never asked on", || {
         seen.lock().ends_with(&[Seen::Reconnected, Seen::Asked { connected: true }])
     });
@@ -129,17 +129,17 @@ struct Gated {
 impl Source for Gated {
     type Held = Wanted;
 
-    fn resume(&mut self, client: &Client, _: &Mutex<Wanted>) -> Result<Subscription> {
+    fn resume(&mut self, client: &Connection, _: &Mutex<Wanted>) -> Result<Subscription> {
         let _ = self.entered.send(());
         let _ = self.gate.recv();
         client.follow(Follow::Terminal { id: "t".into() })
     }
 
-    fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
         Ok(false)
     }
 
-    fn asked(&mut self, _: Option<&Client>, _: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, _: Option<&Connection>, _: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
         Ok(false)
     }
 }
@@ -154,10 +154,11 @@ fn a_follow_says_it_has_caught_up_only_on_the_newest_connection() {
     let (entered, resuming) = flume::unbounded();
     let (open, gate) = flume::unbounded();
     let gated = Gated { entered, gate };
-    let follow = Following::start(Some(&Client::connect(&first, "test").unwrap()), Wanted::default(), move || gated);
+    let follow =
+        Following::start(Some(&Connection::connect(&first, "test").unwrap()), Wanted::default(), move || gated);
     resuming.recv_timeout(WAIT).expect("it never resumed on the first");
 
-    follow.reconnect(&Client::connect(&second, "test").unwrap());
+    follow.reconnect(&Connection::connect(&second, "test").unwrap());
     open.send(()).unwrap();
     resuming.recv_timeout(WAIT).expect("it never resumed on the second");
     let while_the_second_catches_up = follow.connected();

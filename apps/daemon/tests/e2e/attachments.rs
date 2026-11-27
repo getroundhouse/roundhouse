@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
 use protocol::model::{AttachmentId, Seq, SessionId};
@@ -23,7 +23,14 @@ pub(crate) fn png(len: usize) -> Vec<u8> {
     bytes
 }
 
-fn add(client: &Client, session: &SessionId, id: &str, name: &str, media_type: MediaType, data: &[u8]) -> Attachment {
+fn add(
+    client: &Connection,
+    session: &SessionId,
+    id: &str,
+    name: &str,
+    media_type: MediaType,
+    data: &[u8],
+) -> Attachment {
     client.attachment_add(session, &AttachmentId::from(id), name, media_type, data.to_vec()).unwrap()
 }
 

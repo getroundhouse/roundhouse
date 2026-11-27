@@ -1,15 +1,15 @@
 //! The calls that give a session's agent prompts, sent now or queued for when it's finished, and change its queue.
-//! Clients send and queue prompts with [`crate::OpenSession::start_sending`], [`Client::start_queueing`] and
-//! [`Client::send_prompt`], which add their files first, in their place in their chat's line. The calls here that
+//! Clients send and queue prompts with [`crate::OpenSession::start_sending`], [`Connection::start_queueing`] and
+//! [`Connection::send_prompt`], which add their files first, in their place in their chat's line. The calls here that
 //! send one whose files are added already are for tests.
 
 use protocol::client::{agent, queue};
 use protocol::model::{AttachmentId, ClientMessageId, Seq, Session, SessionId};
 use protocol::prompt::Prompt;
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Sends a prompt that says only `text`, for a test, which can send it under no ID. Returns its `seq`, and whether
     /// it had already been recorded.
     #[cfg(any(test, feature = "testing"))]
@@ -22,7 +22,7 @@ impl Client {
         self.prompt_carried(id, client_msg_id, Prompt::new(text))
     }
 
-    /// The same, for a prompt that can carry files, each added first with [`Client::attachment_add`].
+    /// The same, for a prompt that can carry files, each added first with [`Connection::attachment_add`].
     #[cfg(any(test, feature = "testing"))]
     pub fn session_prompt_with(
         &self,
@@ -51,7 +51,7 @@ impl Client {
         self.queue_carried(id, client_msg_id, Prompt::new(text))
     }
 
-    /// The same, for a prompt that can carry files, each added first with [`Client::attachment_add`].
+    /// The same, for a prompt that can carry files, each added first with [`Connection::attachment_add`].
     #[cfg(any(test, feature = "testing"))]
     pub fn session_queue_with(
         &self,

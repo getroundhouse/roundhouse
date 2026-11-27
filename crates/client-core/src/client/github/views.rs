@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use protocol::model::ReferenceAsk;
 
 use super::held::GithubHeld;
-use crate::client::Client;
+use crate::client::Connection;
 use crate::client::at_level::LevelSource;
 use crate::client::follow::{Following, Reach};
 use crate::records::HubRecords;
@@ -24,15 +24,15 @@ pub struct GithubFeed {
 impl GithubFeed {
     /// Starts following, on a thread of its own, with no chip shown until a view says what it shows, writing what's
     /// sent in `records`, the copy of the same hub's records.
-    pub(in crate::client) fn start(connection: Option<&Client>, records: Reach<HubRecords>) -> GithubFeed {
+    pub(in crate::client) fn start(connection: Option<&Connection>, records: Reach<HubRecords>) -> GithubFeed {
         let follow =
             Following::start(connection, GithubHeld::default(), move || LevelSource::<ReferenceAsk>::new(records));
         GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)) }
     }
 
     /// Carries on on a new connection, following again the chips shown.
-    pub(crate) fn reconnect(&self, client: &Client) {
-        self.follow.reconnect(client);
+    pub(crate) fn reconnect(&self, connection: &Connection) {
+        self.follow.reconnect(connection);
     }
 
     /// A view's part of it, which shows nothing until it says.

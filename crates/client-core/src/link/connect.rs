@@ -1,6 +1,6 @@
 //! What an app gives a link: how it connects to its hub, and how it says why it isn't connected.
 
-use crate::{Client, ClientError, FollowError};
+use crate::{ClientError, Connection, FollowError};
 
 /// How an app connects to one hub, which a [`Link`](super::Link) calls on a thread of its own each time it connects.
 /// The iPhone app reaches a paired hub over the network, and the desktop app can also start a hub on this machine,
@@ -12,7 +12,7 @@ pub trait Connect: Send + 'static {
     type Failure: Clone + Send + 'static;
 
     /// Connects, blocking until it has or can't.
-    fn connect(&mut self) -> Result<(Client, Self::With), Refused<Self::Failure>>;
+    fn connect(&mut self) -> Result<(Connection, Self::With), Refused<Self::Failure>>;
 
     /// Why it isn't connected, once the link has given up on a connection, as [`Lost`] says.
     fn lost(&self, lost: &Lost) -> Self::Failure;

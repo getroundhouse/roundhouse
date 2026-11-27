@@ -4,7 +4,7 @@
 
 #![cfg(test)]
 
-use client_core::{Client, FileToSend};
+use client_core::{Connection, FileToSend};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
@@ -14,7 +14,7 @@ use protocol::prompt::Prompt;
 use crate::support::{Stack, read_all, wait_until};
 
 /// Keeps a task in the dialog, with a file, for the stack's repository, planning on Sonnet at low effort.
-fn kept_in_the_dialog(stack: &Stack, client: &Client) -> NewWorkspaceDraftToKeep {
+fn kept_in_the_dialog(stack: &Stack, client: &Connection) -> NewWorkspaceDraftToKeep {
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"one\n".to_vec()).unwrap();
     client.new_workspace_draft_file_add(&notes.attachment.id, "notes.txt", MediaType::Text, notes.data).unwrap();
@@ -32,7 +32,7 @@ fn kept_in_the_dialog(stack: &Stack, client: &Client) -> NewWorkspaceDraftToKeep
 }
 
 /// Each prompt the chat has been sent: what it said, and the files it carried.
-fn prompts(client: &Client, session: &SessionId) -> Vec<Prompt<Attachment>> {
+fn prompts(client: &Connection, session: &SessionId) -> Vec<Prompt<Attachment>> {
     let events = read_all(client, session);
     let prompts = events.into_iter().filter_map(|event| match event.body {
         EventBody::UserPrompt { prompt, .. } => Some(prompt),

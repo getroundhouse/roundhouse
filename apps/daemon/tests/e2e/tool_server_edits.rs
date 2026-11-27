@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::event::EventBody;
@@ -16,7 +16,7 @@ use crate::support::{Stack, calls, session_records, wait_for_status, wait_for_tu
 use crate::tool_servers::{ANOTHER, CALL, KEY, Took, add, holding, stand_in};
 
 /// Gives the server [`ANOTHER`] key, at `url`.
-fn give_another_key(client: &Client, url: &str, moves: bool) {
+fn give_another_key(client: &Connection, url: &str, moves: bool) {
     let key = Some(ToolServerKey::new(ANOTHER));
     let auth = Some(ToolServerAuthEdit::Key { header: "X-Key".into(), key, url: url.into() });
     client
@@ -25,7 +25,7 @@ fn give_another_key(client: &Client, url: &str, moves: bool) {
 }
 
 /// The only server the chat's agent last said it has.
-fn said(client: &Client, chat: &SessionId) -> ToolServerState {
+fn said(client: &Connection, chat: &SessionId) -> ToolServerState {
     let listed = session_records(client, chat).observations.into_iter();
     let servers = listed.filter_map(|observation| match observation {
         Observation::SessionToolServers { servers: Observed::AsOf { value, .. }, .. } => Some(value),

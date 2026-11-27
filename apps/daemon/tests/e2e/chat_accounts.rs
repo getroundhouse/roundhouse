@@ -6,7 +6,7 @@
 
 #![cfg(test)]
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::capability::settings::Settings;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Account, AgentKind, LoginToken, SessionId, SessionStatus};
@@ -44,25 +44,25 @@ impl TwoAccounts {
         TwoAccounts { stack, personal, session: session.id }
     }
 
-    fn client(&self) -> Client {
+    fn client(&self) -> Connection {
         self.stack.client()
     }
 
     /// Another chat in the same workspace, on no account until its agent first starts.
-    fn another_chat(&self, client: &Client) -> SessionId {
+    fn another_chat(&self, client: &Connection) -> SessionId {
         let workspace = client.session_get(&self.session).unwrap().workspace_id;
         client.session_create(&workspace, AgentKind::Claude, Settings::default(), None).unwrap().id
     }
 }
 
 /// Has the hub hold a login for Claude called `name`, whose token is its name in lower case, then `-token`.
-fn connect(client: &Client, name: &str) -> Account {
+fn connect(client: &Connection, name: &str) -> Account {
     let token = LoginToken::new(format!("{}-token", name.to_lowercase()));
     client.account_connect(AgentKind::Claude, name, token, None).unwrap()
 }
 
 /// The token the agent runs under, as it says once it has done `then` in the `turn`th turn.
-fn token_in_turn(client: &Client, session: &SessionId, turn: usize, then: &str) -> String {
+fn token_in_turn(client: &Connection, session: &SessionId, turn: usize, then: &str) -> String {
     client.session_prompt(session, &format!("{then};{TOKEN}"), None).unwrap();
     let text = assistant_text(&wait_for_turn_end(client, session, turn));
     text.rsplit("CLAUDE_CODE_OAUTH_TOKEN=").next().unwrap().to_string()

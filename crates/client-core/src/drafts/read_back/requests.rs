@@ -1,5 +1,5 @@
 use super::super::FilesFor;
-use crate::{Client, ClientError, FileToSend};
+use crate::{ClientError, Connection, FileToSend};
 use protocol::attachment::Attachment;
 
 /// The files the hub kept for a draft, as they were read back, in their order, each with its bytes or why it couldn't
@@ -28,7 +28,7 @@ impl std::fmt::Display for NotReadBack {
     }
 }
 
-impl Client {
+impl Connection {
     /// Reads back each of `files`, which the hub kept for `kept_for`, one at a time. Each read blocks, and can be a lot
     /// of bytes, so it belongs on a thread of its own, and isn't a command quitting waits for, since the hub keeps them
     /// anyway.

@@ -10,9 +10,9 @@ use protocol::model::{
     NewWorkspaceDraftToKeep, Session, SessionId, Workspace, WorkspaceId,
 };
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// See [`drafts::SessionDraft`]: `typed_at_ms` is when the change was typed, and one without it counts as typed as
     /// it arrives. A hub that has a change typed after it refuses it as `is_conflict` says.
     pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep, typed_at_ms: Option<i64>) -> Result<Session> {

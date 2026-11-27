@@ -1,4 +1,4 @@
-use crate::{Client, ClientError, Result};
+use crate::{ClientError, Connection, Result};
 use protocol::model::{AgentDescription, AgentKind};
 
 /// Each kind of agent a hub runs, as it describes them, so a client offers what each takes. Until the hub has described
@@ -12,8 +12,8 @@ impl Agents {
     /// Asks the hub, which says the same for as long as it runs, so once a connection is enough. A hub that refuses
     /// describes none, and so does one whose answer can't be read, since what a client shows of a hub's records matters
     /// more. Only losing the connection fails.
-    pub fn read(client: &Client) -> Result<Agents> {
-        match client.agent_list() {
+    pub fn read(connection: &Connection) -> Result<Agents> {
+        match connection.agent_list() {
             Ok(described) => Ok(Agents { described }),
             Err(ClientError::Api(_) | ClientError::Unexpected(_)) => Ok(Agents::default()),
             Err(

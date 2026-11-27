@@ -7,7 +7,7 @@ use std::net::TcpListener;
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use client_core::{Client, ClientError, RemoteHub};
+use client_core::{ClientError, Connection, RemoteHub};
 use protocol::client::{ClientFrame, ClientResponse, HubFrame, ReplyOutcome, devices};
 use protocol::pairing::{DeviceToken, Fingerprint, PairingCode, PairingLink};
 use tokio_rustls::rustls::{self, ServerConfig, ServerConnection, StreamOwned};
@@ -103,7 +103,7 @@ fn finishes<T: Send + 'static>(peer: Peer, call: impl FnOnce(RemoteHub) -> T + S
 #[test]
 fn authentication_cannot_wait_forever_after_tls_succeeds() {
     let error = finishes(Peer::silent(false), |hub| {
-        Client::connect_remote_with_timeout(&hub, "test", OPERATION_TIMEOUT).err().unwrap()
+        Connection::connect_remote_with_timeout(&hub, "test", OPERATION_TIMEOUT).err().unwrap()
     });
     assert!(matches!(error, ClientError::Io(ref e) if e.kind() == std::io::ErrorKind::TimedOut), "{error}");
 }
@@ -111,7 +111,7 @@ fn authentication_cannot_wait_forever_after_tls_succeeds() {
 #[test]
 fn hello_cannot_wait_forever_after_authentication_succeeds() {
     let error = finishes(Peer::silent(true), |hub| {
-        Client::connect_remote_with_timeout(&hub, "test", OPERATION_TIMEOUT).err().unwrap()
+        Connection::connect_remote_with_timeout(&hub, "test", OPERATION_TIMEOUT).err().unwrap()
     });
     assert!(matches!(error, ClientError::Io(ref e) if e.kind() == std::io::ErrorKind::TimedOut), "{error}");
 }
@@ -133,8 +133,8 @@ fn pairing_cannot_wait_forever_after_tls_succeeds() {
 #[test]
 fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
     finishes(Peer::silent(false), |hub| {
-        let client = Client::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
-        let waiting = client.start(Client::records);
+        let client = Connection::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
+        let waiting = client.start(Connection::records);
         // About three times what the connection holds while the peer reads no application data. No more, since the
         // deadline counts encoding it, which a test build does slowly: on a Mac runner busy with other tests, 16 MB
         // took 4.8 s, and on an idle Mac 0.2 s.

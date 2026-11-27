@@ -5,7 +5,7 @@
 #[cfg(test)]
 use crate::attachments::FileToSend;
 #[cfg(test)]
-use crate::client::{Client, ClientError, OpenSession};
+use crate::client::{ClientError, Connection, OpenSession};
 #[cfg(test)]
 use protocol::model::Seq;
 

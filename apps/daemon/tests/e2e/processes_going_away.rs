@@ -5,7 +5,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use client_core::{Client, ClientError, SubscriptionItem};
+use client_core::{ClientError, Connection, SubscriptionItem};
 use hub::Timers;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
@@ -145,7 +145,7 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
     let mut command = stack.command();
     command.env("ROUNDHOUSE_CLAUDE_BIN", "/nonexistent/claude");
     stack.hub = Some(command.spawn().unwrap().into());
-    wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub", || Connection::connect(&stack.socket(), "test").is_ok());
 
     let client = stack.client();
     let (_, session) = stack.workspace(&client);

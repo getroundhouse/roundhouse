@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use client_core::calls::typed::output as said;
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Connection};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::calls::{CallKind, CallOutput};
 use protocol::client::ErrorCode;
@@ -18,7 +18,7 @@ use crate::support::{Stack, read_all, wait_for_approval, wait_for_status, wait_f
 /// A chat in plan mode, which asks before each command, and the worktree its commands run in.
 struct Planning {
     stack: Stack,
-    client: Client,
+    client: Connection,
     chat: SessionId,
     worktree: PathBuf,
 }
@@ -34,7 +34,13 @@ impl Planning {
 
     /// Has the agent run `command` in the chat's `turn`th turn, decides the approval it asks for with `decision`,
     /// through `client`, and returns the approval and what that turn recorded.
-    fn run(&self, client: &Client, turn: usize, command: &str, decision: Decision) -> (ApprovalId, Vec<SessionEvent>) {
+    fn run(
+        &self,
+        client: &Connection,
+        turn: usize,
+        command: &str,
+        decision: Decision,
+    ) -> (ApprovalId, Vec<SessionEvent>) {
         let before = read_all(client, &self.chat).len();
         client.session_prompt(&self.chat, &format!("tool:{command}"), None).unwrap();
         let approval = wait_for_approval(client, &self.chat);

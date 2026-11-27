@@ -1,6 +1,6 @@
 //! The requests for approval a chat waits on, and answering them as a client does.
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, SessionId};
 
@@ -18,7 +18,7 @@ pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<ApprovalId> {
     open
 }
 
-pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> ApprovalId {
+pub(crate) fn wait_for_approval(client: &Connection, session_id: &SessionId) -> ApprovalId {
     let mut found = None;
     wait_until("an approval request", || {
         found = pending_approval(&read_all(client, session_id));
@@ -28,7 +28,7 @@ pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> Appr
 }
 
 /// Approves the plan waiting in `session_id` under `approval`, as a client does.
-pub(crate) fn approve_plan(client: &Client, session_id: &SessionId, approval: &ApprovalId) {
+pub(crate) fn approve_plan(client: &Connection, session_id: &SessionId, approval: &ApprovalId) {
     let session = client.session_get(session_id).unwrap();
     let asked = client.waiting_request(&session, approval).unwrap().expect("the plan waits");
     let approved = client_core::Approval::of(&asked.body).unwrap().approve();

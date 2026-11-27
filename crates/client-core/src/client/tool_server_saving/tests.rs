@@ -11,7 +11,7 @@ use protocol::client::tool_servers::ToolServerAdd;
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
 use protocol::model::ToolServerAuthGiven;
 
-use super::super::Client;
+use super::super::Connection;
 use super::ToolServerSaving;
 use super::saving::Saving;
 use crate::stand_in_hub::{self, Does};
@@ -81,7 +81,7 @@ fn a_save_let_go_of_before_its_sent_sends_nothing_and_one_let_go_of_after_has_it
             _ => answers(ClientResponse::Ok),
         }
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let mut heard = Heard { from, so_far: Vec::new() };
 
     let early = Saving::default();

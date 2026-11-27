@@ -4,9 +4,9 @@ use protocol::client::log;
 use protocol::event::SessionEvent;
 use protocol::model::{Place, SessionId, SubagentId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Returns the agent's own events, or those of the subagent `subagent`, from `from_place` on, and the place
     /// of the newest of them. See [`log::SessionReadPlaces`].
     pub fn session_read_places(

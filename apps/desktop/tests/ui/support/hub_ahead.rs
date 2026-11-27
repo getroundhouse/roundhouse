@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
 
-use client_core::Client;
+use client_core::Connection;
 use process::testing::WholeEnvironment;
 
 use super::{Stack, TIMEOUT, binaries};
@@ -34,7 +34,7 @@ impl Stack {
             .unwrap();
         let socket = self.hub.paths.socket.clone();
         waiting::thread::until(TIMEOUT, "timed out waiting for the hub to listen", || {
-            Client::connect(&socket, "test").is_ok()
+            Connection::connect(&socket, "test").is_ok()
         });
         HubAhead { hub, socket }
     }

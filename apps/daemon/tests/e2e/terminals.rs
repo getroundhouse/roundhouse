@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use client_core::{Client, OnSocket, OpenTerminal};
+use client_core::{Connection, OnSocket, OpenTerminal};
 use process::ProcessRecord;
 use protocol::model::{TerminalId, WorkspaceId};
 use protocol::paths::AGENTS_DIR;
@@ -46,13 +46,13 @@ fn shown_when(open: &OpenTerminal, what: &str, done: impl Fn(&str) -> bool) -> S
 
 /// Types `typed` into `open` straight to the hub, as text the shell reads as it is, rather than through the open
 /// terminal, which sends nothing for a key before its first picture.
-fn type_in(client: &Client, open: &OpenTerminal, typed: &str) {
+fn type_in(client: &Connection, open: &OpenTerminal, typed: &str) {
     client.terminal_typed(open.id(), Typed::Text { text: typed.to_owned() }).unwrap();
 }
 
 /// The process ID of the shell in `open`, which it prints as asked. What's typed is shown too, which the quotes keep
 /// from looking like what it prints.
-fn shell_pid(client: &Client, open: &OpenTerminal) -> u32 {
+fn shell_pid(client: &Connection, open: &OpenTerminal) -> u32 {
     type_in(client, open, "echo pi''d:$$:\r");
     printed_pid(open, "pid:")
 }
@@ -76,7 +76,7 @@ fn recorded_in_front(stack: &Stack) -> Option<u32> {
 
 /// Opens terminal `t` in `workspace`, and follows it from the hub on `stack`, as a view does, which it does for as long
 /// as the hub's returned with it is held.
-fn open_terminal(stack: &Stack, client: &Client, workspace: &WorkspaceId) -> (OnSocket, OpenTerminal) {
+fn open_terminal(stack: &Stack, client: &Connection, workspace: &WorkspaceId) -> (OnSocket, OpenTerminal) {
     let id = TerminalId::from("t");
     client.terminal_open(workspace, &id, SIZE).unwrap();
     let hub = OnSocket::connect(&stack.socket());
@@ -94,7 +94,7 @@ fn open_terminal(stack: &Stack, client: &Client, workspace: &WorkspaceId) -> (On
     (hub, open)
 }
 
-fn terminals_open(client: &Client) -> usize {
+fn terminals_open(client: &Connection) -> usize {
     client.records().unwrap().terminals.len()
 }
 

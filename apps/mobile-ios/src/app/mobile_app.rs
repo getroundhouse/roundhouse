@@ -43,7 +43,7 @@ pub fn open_window(
 pub fn open_window_connecting(
     vault: Arc<dyn Vault>,
     links: flume::Receiver<String>,
-    connect: impl Fn(&RemoteHub) -> Result<client_core::Client, client_core::ClientError> + Send + Sync + 'static,
+    connect: impl Fn(&RemoteHub) -> Result<client_core::Connection, client_core::ClientError> + Send + Sync + 'static,
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {

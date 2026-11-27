@@ -7,7 +7,7 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use client_core::{Client, RecordsFeed};
+use client_core::{Connection, RecordsFeed};
 use hub::{
     ToolServerPage, ToolServerRefreshing, ToolServerRegisters, ToolServerSaysAllowed, ToolServerScript,
     ToolServerStandIn, ToolServerWants,
@@ -112,7 +112,7 @@ pub(crate) fn holding(dir: &Path, text: &str) -> Vec<PathBuf> {
 }
 
 /// Adds the server at `url` as `Linear (Northwind)`, which agents call `Linear_Northwind`, with [`KEY`].
-pub(crate) fn add(client: &Client, url: String) {
+pub(crate) fn add(client: &Connection, url: String) {
     let auth = ToolServerAuthGiven::Key { header: "X-Key".into(), key: ToolServerKey::new(KEY) };
     client.call(ToolServerAdd { id: "t".into(), name: "Linear (Northwind)".into(), url, auth }).unwrap();
 }
@@ -168,7 +168,7 @@ fn new(stand_in: &ToolServerStandIn) -> ToolSignInTo {
 }
 
 /// Signs in `to` the stand-in's server, as the person does in their browser, and gives the page they did on.
-fn sign_in(client: &Client, stand_in: &ToolServerStandIn, to: ToolSignInTo) -> String {
+fn sign_in(client: &Connection, stand_in: &ToolServerStandIn, to: ToolSignInTo) -> String {
     let id = client_core::new_tool_sign_in_id();
     let begun = client.tool_sign_in_start(&id, to, redirect(17867)).unwrap();
     let ToolSignInBegun::Page { page } = begun else { panic!("{begun:?}") };
@@ -284,7 +284,7 @@ fn signed_in_again_for_more_access(script: ToolServerScript) -> [String; 2] {
 }
 
 /// How the chat's agent last said each of its servers is, where the hub knows.
-pub(crate) fn states(client: &Client, chat: &SessionId) -> Vec<(String, ServerState)> {
+pub(crate) fn states(client: &Connection, chat: &SessionId) -> Vec<(String, ServerState)> {
     let listed = session_records(client, chat).observations.into_iter();
     let servers = listed.filter_map(|observation| match observation {
         Observation::SessionToolServers { servers: Observed::AsOf { value, .. }, .. } => Some(value),

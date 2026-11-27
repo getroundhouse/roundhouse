@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use client_core::{Client, RecordsFeed, View};
+use client_core::{Connection, RecordsFeed, View};
 use protocol::client::proposals::{ProposalAnotherRound, ProposalAnswer};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
@@ -19,7 +19,7 @@ use crate::support::{Stack, read_all, session_records, wait_for_turn_end, wait_u
 const PROPOSE: &str = r#"mcp:propose {"title":"Search","context":"Find what was said.","questions":[{"header":"Index","question":"Where does it live?","options":[{"label":"The hub's database","description":"FTS5","body":"**In step** after a crash."},{"label":"The logs","description":"Nothing kept"}],"recommended":"A","why":"It's fast."}]}"#;
 
 /// Each call to a tool in the turn that ended `turn`th, with what it came back with and whether it failed, in order.
-fn calls(client: &Client, chat: &SessionId, script: &str, turn: usize) -> Vec<(String, String, bool)> {
+fn calls(client: &Connection, chat: &SessionId, script: &str, turn: usize) -> Vec<(String, String, bool)> {
     client.session_prompt(chat, script, None).unwrap();
     let events = wait_for_turn_end(client, chat, turn);
     let since = events.iter().rposition(|event| matches!(event.body, EventBody::UserPrompt { .. })).unwrap();

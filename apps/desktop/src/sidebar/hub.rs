@@ -15,7 +15,7 @@ use look::{Hand as _, IconSizing as _, Shaped as _, Typeset};
 use protocol::pairing::Fingerprint;
 
 use super::{LIST_PAD, ROW_PAD, needing_a_look, row_icon};
-use crate::app::{AppView, Connection, hubs, pairing, saved_hubs, share_hub};
+use crate::app::{AppView, Linking, hubs, pairing, saved_hubs, share_hub};
 use crate::names::{MACHINE, THIS_MACHINE};
 use crate::sides::Side;
 
@@ -91,26 +91,26 @@ fn switcher_trailing(
     cx: &App,
 ) -> (Option<String>, Option<AnyElement>) {
     let colors = look::colors(cx);
-    match app.connection() {
-        Connection::Connecting if remote => {
+    match app.linking() {
+        Linking::Connecting if remote => {
             (Some("Connecting".to_string()), Some(inline_detail("Connecting…", colors.text_muted)))
         }
-        Connection::Failed(failure) => {
+        Linking::Failed(failure) => {
             let label = failure.switcher_label();
             let color = if failure.needs_attention() { colors.error } else { colors.text_muted };
             (Some(label.to_string()), Some(inline_detail(label, color)))
         }
-        Connection::AcrossABreak(_) => {
+        Linking::AcrossABreak(_) => {
             (Some("Update required".to_string()), Some(inline_detail("Update required", colors.warning)))
         }
-        Connection::Ready | Connection::Connecting if background_attention > 0 => {
+        Linking::Ready | Linking::Connecting if background_attention > 0 => {
             let says = attention_words(background_attention);
             let badge = look::count(look::CountKind::NeedsALook, background_attention)
                 .said("hub-switcher-needs-a-look", says.clone())
                 .into_any_element();
             (Some(says), Some(badge))
         }
-        Connection::Ready | Connection::Connecting => (None, None),
+        Linking::Ready | Linking::Connecting => (None, None),
     }
 }
 
@@ -178,7 +178,7 @@ fn note_for(
                 return Some((count.to_string().into(), look::NoteKind::Count));
             }
         }
-        if let Connection::Failed(failure) = view.connection() {
+        if let Linking::Failed(failure) = view.linking() {
             let kind = if failure.needs_attention() { look::NoteKind::Failure } else { look::NoteKind::Detail };
             return Some((failure.switcher_label().into(), kind));
         }

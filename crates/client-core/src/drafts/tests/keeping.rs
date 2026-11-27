@@ -31,7 +31,7 @@ pub(super) enum Answer {
 type Heard = flume::Receiver<(String, String)>;
 
 /// A hub that answers every draft and file as `answer` says, after saying what it was.
-pub(super) fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
+pub(super) fn hub(socket: &Path, answer: Answer) -> (Connection, Heard) {
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         let added = added(&request);
@@ -274,7 +274,7 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
 
 /// A hub that keeps every draft, decision and comment, and the new-workspace dialog's, and answers with the record it's
 /// kept on, carrying it, at the next of its revisions, from `first`.
-pub(super) fn keeping_hub(socket: &Path, first: u64) -> Client {
+pub(super) fn keeping_hub(socket: &Path, first: u64) -> Connection {
     let mut next = first;
     stand_in_hub::connect(socket, move |request| {
         let kept = if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft, .. }) = request {

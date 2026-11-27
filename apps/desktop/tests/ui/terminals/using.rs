@@ -1,7 +1,7 @@
 //! Opening a terminal, and its ending, as it's closed, as its shell ends, and as the hub restarts under it, with a real
 //! shell, and what the terminal tests share.
 
-use desktop::app::Connection;
+use desktop::app::Linking;
 use desktop::workspace_pane::Showing;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext, WeakEntity};
 use protocol::model::SessionStatus;
@@ -192,7 +192,7 @@ fn a_terminal_carries_on_as_the_hub_restarts_and_a_tab_brought_in_front_of_it_ta
     let pid = stack.client().hub_status().unwrap().pid;
     // Clicked before anything else runs, so the app is surely still connecting.
     ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
-    assert!(matches!(ui.view().connection(), Connection::Connecting));
+    assert!(matches!(ui.view().linking(), Linking::Connecting));
     ui.click(SharedString::from(format!("chat-{chat}")));
     ui.input("kept");
 

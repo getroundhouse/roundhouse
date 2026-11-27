@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use client_core::{Client, Subscription};
+use client_core::{Connection, Subscription};
 use protocol::capability::approvals::Decision;
 use protocol::client::HubNotice;
 use protocol::event::{EventBody, SessionEvent};
@@ -51,7 +51,7 @@ fn answered(events: &[SessionEvent]) -> Vec<Answered> {
 
 /// When the person last did something, by the chat's record and by its workspace's, and when they last prompted it,
 /// by its log.
-fn last_active(client: &Client, chat: &Session, events: &[SessionEvent]) -> [Option<i64>; 3] {
+fn last_active(client: &Connection, chat: &Session, events: &[SessionEvent]) -> [Option<i64>; 3] {
     let prompted = events.iter().rev().find(|event| matches!(event.body, EventBody::UserPrompt { .. }));
     [
         client.session_get(&chat.id).unwrap().user_active_at_ms,

@@ -10,9 +10,9 @@ use protocol::terminal::{
     TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Opens a terminal in the workspace, with an ID new to it, so opening it again opens it once.
     pub fn terminal_open(&self, workspace_id: &WorkspaceId, id: &TerminalId, size: TerminalSize) -> Result<Terminal> {
         self.call(TerminalOpen { workspace_id: workspace_id.clone(), id: id.clone(), size })

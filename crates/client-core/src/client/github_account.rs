@@ -7,9 +7,9 @@ use protocol::model::{
     GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings, MachineLogins,
 };
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Gives the hub `token` to hold as a GitHub account's login, as a new account, or in place of the login of
     /// `account`, as renewing it does, and answers with the account's record. See
     /// [`github_accounts::GithubAccountConnect`].
