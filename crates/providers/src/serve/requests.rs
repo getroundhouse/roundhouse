@@ -5,7 +5,8 @@ use protocol::frame::Call;
 use protocol::model::HubId;
 use protocol::provider::{
     ANSWERED_WITHIN, Create, Destroy, EndWorker, Hello, HelloReply, Instances, KillWorker, MakeBaseImage,
-    PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start,
+    PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start, WorkerState,
+    WorkerStateReply,
 };
 use protocol::versions::Versions;
 use std::io;
@@ -182,6 +183,10 @@ async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<Pro
         ProviderRequest::MakeBaseImage(MakeBaseImage { instance_id }) => provider.make_base_image(&instance_id).await?,
         ProviderRequest::List => {
             return Ok(ProviderResponse::Instances(Instances { instances: provider.list().await? }));
+        }
+        ProviderRequest::WorkerState(WorkerState { instance_id }) => {
+            let state = provider.worker_state(&instance_id).await?;
+            return Ok(ProviderResponse::WorkerState(WorkerStateReply { state }));
         }
         ProviderRequest::OpenPreflight(launch) => {
             return Ok(ProviderResponse::Command(provider.open_preflight(&launch).await?));

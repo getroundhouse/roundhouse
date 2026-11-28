@@ -116,6 +116,48 @@ impl Reply for Instances {
     }
 }
 
+/// Whether the instance's worker is still running, which a hub that has just started asks of a worker an earlier hub
+/// left and that hasn't dialed it. Only a worker that has gone can't dial, so a hub waits for one that's running, and
+/// ends what's left of one that's gone. Optional: an adapter that can't say answers `Unsupported`, which the hub takes
+/// as [`WorkerLiveness::Unknown`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkerState {
+    pub instance_id: InstanceId,
+}
+
+impl Request for WorkerState {
+    type Reply = WorkerStateReply;
+
+    fn into_request(self) -> ProviderRequest {
+        ProviderRequest::WorkerState(self)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorkerStateReply {
+    pub state: WorkerLiveness,
+}
+
+impl Reply for WorkerStateReply {
+    fn read(response: ProviderResponse) -> Result<Self, ProviderResponse> {
+        let ProviderResponse::WorkerState(state) = response else { return Err(response) };
+        Ok(state)
+    }
+}
+
+/// What a provider can say of an instance's worker.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerLiveness {
+    /// The worker is alive, whether or not it has reached the hub.
+    Running,
+    /// Only when the provider is sure that no worker runs there. Anything less is `Unknown`.
+    Gone,
+    /// The provider can't tell, and a reply of a kind this build doesn't know reads as this.
+    #[serde(other)]
+    Unknown,
+}
+
 /// Turns a stopped instance into a base image, which other instances are made from and which can't start again, or
 /// does nothing if it's one already. Refused with `Unsupported` by a provider without
 /// [`Feature::BaseImages`](super::Feature::BaseImages).

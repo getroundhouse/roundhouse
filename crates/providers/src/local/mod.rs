@@ -18,6 +18,7 @@ use std::time::Duration;
 #[cfg(test)]
 mod tests;
 
+mod claimed;
 mod provider;
 mod starting;
 

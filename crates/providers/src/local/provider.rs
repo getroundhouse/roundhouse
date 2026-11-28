@@ -1,6 +1,6 @@
 use crate::{
     Capabilities, Feature, Instance, InstanceState, Provider, ProviderError, Size, WorkerBinary, WorkerCommand,
-    WorkerReach,
+    WorkerLiveness, WorkerReach,
 };
 use async_trait::async_trait;
 use process::{Environment, ProcessRecord, Signal, signal_group};
@@ -274,6 +274,15 @@ impl Provider for LocalProvider {
             }
         }
         Ok(running)
+    }
+
+    /// By the claim the worker holds, as [`claim_liveness`] says. A worker an earlier build left listening holds it
+    /// too, since every worker takes it, so an instance that was never claimed is unknown.
+    async fn worker_state(&self, instance_id: &InstanceId) -> Result<WorkerLiveness, ProviderError> {
+        let dir = self.instance_dir(instance_id);
+        Ok(tokio::task::spawn_blocking(move || super::claimed::claim_liveness(&dir))
+            .await
+            .unwrap_or(WorkerLiveness::Unknown))
     }
 
     /// `worker --attach`, which reaches a worker an earlier build left listening on a socket in its state directory,

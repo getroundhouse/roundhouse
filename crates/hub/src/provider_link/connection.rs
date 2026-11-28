@@ -11,6 +11,7 @@ use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
     ANSWERED_WITHIN, Create, Destroy, EndWorker, Hello, HelloReply, KillWorker, List, MakeBaseImage, ProviderCall,
     ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request, Start,
+    WorkerLiveness, WorkerState,
 };
 use protocol::{Build, frame};
 use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerEnvironment};
@@ -356,6 +357,10 @@ impl Provider for AdapterProvider {
         launch: &providers::OpenPreflight,
     ) -> Result<protocol::provider::Command, ProviderError> {
         self.call(launch.clone()).await
+    }
+
+    async fn worker_state(&self, instance_id: &InstanceId) -> Result<WorkerLiveness, ProviderError> {
+        Ok(self.call(WorkerState { instance_id: instance_id.clone() }).await?.state)
     }
 
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {

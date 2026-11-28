@@ -5,15 +5,15 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::InstanceId;
-use providers::Provider;
+use providers::{Provider, ProviderError, WorkerLiveness};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::carrier::Carrier;
 use crate::child_process::{self, Spawned, Stderr};
 use crate::error::provider_failed;
 use crate::hub::Hub;
-use crate::worker_dial::Endpoint;
+use crate::worker_dial::{Dialed, Endpoint};
 
 /// The worker a link is opened to.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -107,12 +107,65 @@ async fn dialed(
             hub.timers.before_serving
         }
     };
-    let dialed = hub.dial.worker(instance_id, within).await.ok_or_else(|| didnt_dial(within))?;
+    let dialed = match opening {
+        Opening::Started => hub.dial.worker(instance_id, within).await,
+        Opening::LeftRunning => dial_unless_gone(hub, provider, instance_id, within).await?,
+    }
+    .ok_or_else(|| didnt_dial(within))?;
     Ok(Reached {
         carrier: Carrier::Dialed(dialed.connection),
         reader: Box::new(dialed.recv),
         writer: Box::new(dialed.send),
     })
+}
+
+/// How often the hub asks again whether a worker that hasn't dialed is gone. One that has just died can still read as
+/// running for a moment, since the system lets go of its claim only as the last of its threads exits.
+const ASK_AGAIN_EVERY: Duration = Duration::from_millis(250);
+
+/// The connection a worker an earlier hub left dials, if it does within `within`, or an error as soon as its provider
+/// says it's gone, since a worker that's gone can't dial, and waiting out `within` for one would hold up every client
+/// of the hub that's starting. Anything else the provider answers, or fails to within `within`, is no reason to stop
+/// waiting: only proof is. A provider that can't say is asked no more.
+async fn dial_unless_gone(
+    hub: &Hub,
+    provider: &dyn Provider,
+    instance_id: &InstanceId,
+    within: Duration,
+) -> Result<Option<Dialed>, ApiError> {
+    let gone = async {
+        loop {
+            match tokio::time::timeout(within, provider.worker_state(instance_id)).await {
+                Ok(Ok(WorkerLiveness::Gone)) => return,
+                Ok(Ok(state)) => {
+                    debug!(name: "worker.state", %instance_id, ?state, "A worker an earlier hub left isn't gone");
+                }
+                // An adapter that can't say, which is most of them.
+                Ok(Err(ProviderError::Unsupported(_))) => break,
+                Ok(Err(ProviderError::Adapter(e))) if e.code == ErrorCode::Unsupported => break,
+                Ok(Err(e)) => {
+                    debug!(
+                        name: "worker.state_unasked",
+                        %instance_id,
+                        error = error_chain(&e),
+                        "Couldn't ask whether a worker an earlier hub left is running"
+                    );
+                }
+                Err(_) => {}
+            }
+            pause(ASK_AGAIN_EVERY).await;
+        }
+        std::future::pending::<()>().await;
+    };
+    tokio::select! {
+        dialed = hub.dial.worker(instance_id, within) => Ok(dialed),
+        () = gone => Err(ApiError::new(ErrorCode::Worker, "the worker an earlier hub left is gone")),
+    }
+}
+
+#[expect(clippy::disallowed_methods, reason = "the pace a provider is asked again at, until the worker dials")]
+async fn pause(pause: Duration) {
+    tokio::time::sleep(pause).await;
 }
 
 fn didnt_dial(within: Duration) -> ApiError {

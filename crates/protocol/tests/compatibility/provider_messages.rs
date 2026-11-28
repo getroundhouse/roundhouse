@@ -8,6 +8,7 @@ use protocol::provider::{
     Capabilities, ClonePersistence, Command, Create, Destroy, EndWorker, Feature, Hello, HelloReply, Instance,
     InstanceState, Instances, KillWorker, MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame,
     ProviderOutcome, ProviderRequest, ProviderResponse, Size, Start, WorkerBinary, WorkerEnvironment, WorkerFilesystem,
+    WorkerLiveness, WorkerState, WorkerStateReply,
 };
 
 use super::keeps_its_form;
@@ -62,6 +63,10 @@ fn every_request_keeps_its_form() {
         &call(ProviderRequest::MakeBaseImage(MakeBaseImage { instance_id: "i".into() })),
         r#"{"id":7,"request":{"method":"make_base_image","instance_id":"i"}}"#,
     );
+    keeps_its_form(
+        &call(ProviderRequest::WorkerState(WorkerState { instance_id: "i".into() })),
+        r#"{"id":7,"request":{"method":"worker_state","instance_id":"i"}}"#,
+    );
 }
 
 fn reply(response: ProviderResponse) -> ProviderFrame {
@@ -100,6 +105,20 @@ fn every_response_and_event_keeps_its_form() {
         },
         r#"{"frame":"event","event":{"kind":"instance_lost","instance_id":"i","reason":"its host is gone"}}"#,
     );
+}
+
+#[test]
+fn every_worker_state_keeps_its_form() {
+    keeps_its_form(
+        &reply(ProviderResponse::WorkerState(WorkerStateReply { state: WorkerLiveness::Gone })),
+        r#"{"frame":"reply","id":7,"response":{"result":"worker_state","state":"gone"}}"#,
+    );
+    for (state, name) in [(WorkerLiveness::Running, "running"), (WorkerLiveness::Gone, "gone")] {
+        keeps_its_form(&state, &format!("\"{name}\""));
+    }
+    // One a newer adapter says reads as none the hub can act on.
+    let newer: WorkerLiveness = frame::decode(b"\"asleep\"").unwrap();
+    assert_eq!(newer, WorkerLiveness::Unknown);
 }
 
 #[test]

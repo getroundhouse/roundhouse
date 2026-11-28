@@ -110,6 +110,8 @@ async fn it_answers_what_the_adapters_provider_answers() {
     provider.start(&id, &[], Some(&a_ticket())).await.unwrap();
     let connected = provider.connect(&id).await;
     assert!(matches!(connected, Err(ProviderError::Unsupported(_))), "its workers dial the hub: {connected:?}");
+    // No worker has claimed the instance, so the local provider can't say that none will.
+    assert_eq!(provider.worker_state(&id).await.unwrap(), providers::WorkerLiveness::Unknown);
     let listed = provider.list().await.unwrap();
     assert_eq!(listed.iter().map(|i| i.instance_id.as_str()).collect::<Vec<_>>(), ["i"]);
     provider.end_worker(&id).await.unwrap();

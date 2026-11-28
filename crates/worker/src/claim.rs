@@ -5,9 +5,16 @@
 use std::fs::{File, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use process::ProcessRecord;
 use protocol::paths::{WORKER_LOCK_FILE, WORKER_RECORD_FILE};
+
+/// How long a worker that finds the claim held looks again before it takes the claim to be another worker's. The local
+/// provider's `worker_state` takes the same lock, shared, for as long as it takes to see whether anyone holds it, which
+/// is moments. So a worker that starts as the hub asks never reads that as another worker having the instance, and
+/// leaves it to one that does. A worker that really is a second one waits this long for nothing.
+const LOOK_AGAIN_FOR: Duration = Duration::from_millis(500);
 
 /// Held for as long as this worker serves the instance. The lock goes with the process.
 #[derive(Debug)]
@@ -30,14 +37,33 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     std::fs::create_dir_all(state_dir).map_err(io(format!("creating {}", state_dir.display())))?;
     let path = state_dir.join(WORKER_LOCK_FILE);
     let lock = File::create(&path).map_err(io(format!("opening {}", path.display())))?;
-    match lock.try_lock() {
-        Ok(()) => {}
-        Err(TryLockError::WouldBlock) => return Err(ClaimError::Taken(state_dir.to_path_buf())),
-        Err(TryLockError::Error(e)) => return Err(io(format!("locking {}", path.display()))(e)),
+    match lock_unless_held(&lock) {
+        Ok(true) => {}
+        Ok(false) => return Err(ClaimError::Taken(state_dir.to_path_buf())),
+        Err(e) => return Err(io(format!("locking {}", path.display()))(e)),
     }
     let record = state_dir.join(WORKER_RECORD_FILE);
     ProcessRecord::write(&record, std::process::id()).map_err(io(format!("writing {}", record.display())))?;
     Ok(InstanceClaim { _lock: lock })
+}
+
+/// Takes the lock, or says it's held, once it has looked for [`LOOK_AGAIN_FOR`] and found it so every time.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a claim that's held is looked at again, in case what holds it is only the provider's look"
+)]
+fn lock_unless_held(lock: &File) -> io::Result<bool> {
+    let deadline = Instant::now() + LOOK_AGAIN_FOR;
+    loop {
+        match lock.try_lock() {
+            Ok(()) => return Ok(true),
+            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(TryLockError::WouldBlock) => return Ok(false),
+            Err(TryLockError::Error(e)) => return Err(e),
+        }
+    }
 }
 
 /// Claims the instance for a worker whose state directory is `state_dir`, and that outlives its hub, as one that dials
@@ -52,8 +78,6 @@ pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimEr
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
 
     /// Claims the instance once its last claim has let go. A lock goes with the open file, and a process another
@@ -84,6 +108,25 @@ mod tests {
         let record = ProcessRecord::read(&dir.path().join(WORKER_RECORD_FILE)).unwrap();
         assert_eq!(record.pid, std::process::id());
         assert!(record.is_running());
+    }
+
+    /// As the local provider's look at whether a worker holds the instance, which holds the lock shared for a moment,
+    /// does as a worker starts.
+    #[test]
+    fn a_look_at_the_claim_doesnt_stop_a_worker_taking_it() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(WORKER_LOCK_FILE), "").unwrap();
+        let looked = File::open(dir.path().join(WORKER_LOCK_FILE)).unwrap();
+        looked.try_lock_shared().unwrap();
+        let looking = std::thread::spawn(move || {
+            waiting::thread::for_what_mustnt_happen(Duration::from_millis(100));
+            drop(looked);
+        });
+
+        let claimed = claim_instance(dir.path());
+
+        looking.join().unwrap();
+        assert!(claimed.is_ok(), "{claimed:?}");
     }
 
     /// As one started at the same time as another, to serve the same hub, finds the other has it.

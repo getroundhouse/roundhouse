@@ -70,12 +70,13 @@ jobs:
       # Tests of what Windows does differently below the hub, of Ghostty's terminal core, built by Zig for MSVC, which
       # only a Windows machine can build, and of libvpx, built by MSVC with nasm's assembly.
       - run: cargo test --locked -p process -p private-files -p protocol -p terminal-state -p video -p libvpx-build
-      # A local workspace's worker dialing its hub, its agent carrying on through the hub's restart and crash, the hub
-      # getting past a worker that misbehaves once it has dialed, and a setup script running in Git's bash rather than
-      # WSL's. The fake agent's tools run in whichever sh comes first on the PATH, which is Git's, as Git's bash has it.
+      # A local workspace's worker dialing its hub, its agent carrying on through the hub's restart and crash, a hub that
+      # has just started getting a new worker for one that was killed while it was gone, the hub getting past a worker
+      # that misbehaves once it has dialed, and a setup script running in Git's bash rather than WSL's. The fake agent's
+      # tools run in whichever sh comes first on the PATH, which is Git's, as Git's bash has it.
       - run: >-
           cargo test --locked -p daemon --test e2e --
-          dialing:: carrying_on:: misbehaving_worker:: environment::a_setup_script_on_windows_runs_in_gits_bash
+          dialing:: carrying_on:: misbehaving_worker:: worker_state:: environment::a_setup_script_on_windows_runs_in_gits_bash
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts

@@ -77,6 +77,29 @@ impl Drop for Hub {
 }
 
 impl Stack {
+    /// The PID of the one worker running in the stack's instances, whichever provider has it, read from the record
+    /// the worker makes once it holds its instance, so it needs neither `ps` nor a Unix.
+    pub(crate) fn worker_pid(&self) -> u32 {
+        let adapters = std::fs::read_dir(self.path("adapter-instances")).into_iter().flatten();
+        let local = std::fs::read_dir(self.paths().instances_dir).into_iter().flatten();
+        let running: Vec<u32> = local
+            .chain(adapters)
+            .flatten()
+            .filter_map(|instance| {
+                process::ProcessRecord::read(&instance.path().join(protocol::paths::WORKER_RECORD_FILE))
+            })
+            .filter(process::ProcessRecord::is_running)
+            .map(|worker| worker.pid)
+            .collect();
+        assert_eq!(running.len(), 1, "one worker should be running: {running:?}");
+        running[0]
+    }
+
+    /// Kills the worker `pid` and what it started, with no warning, as a crash does, on any OS.
+    pub(crate) fn kill_worker(pid: u32) {
+        process::signal_group(pid, process::Signal::Kill);
+    }
+
     /// As a hub that crashes goes, leaving its workers running for the next hub, which carries on with their agents.
     pub(crate) fn kill_hub(&mut self) {
         let mut hub = self.hub.take().unwrap();
