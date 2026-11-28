@@ -12,7 +12,9 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - Each `init` returns the whole design system and manual, which is long, so an agent calls it once.
 - An edit of several blocks applies those before the one that fails.
 - The app refuses to write an export into a hidden folder, such as `.context`. It writes into the project's `Exports/`.
+- An export with the `window` background came out on white, so a dark canvas's part is exported `clear` and set on its surface afterwards.
 - A video, a UI capture and an edit read from a file need the app rather than a tab, by its docs. `render_ui` is refused in a tab.
+- Once the app had quit and opened again, the bridge answered no call, `init` included, while the app's own server answered at once. A `tools/call` posted to `127.0.0.1:3333/mcp` as JSON-RPC, with no session of its own, reached the same tools, `init` among them, and wrote the canvas as the bridge would.
 
 ## Files
 
@@ -57,6 +59,7 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A gradient is a fill, as `f[(linear(180,$color.surface.icon_tile_top,$color.surface.pane))]`, written as a stop for each colour. At 180 the first is at the top and the last at the bottom.
 - A size can be a token, as `s($size.icon.Large,$size.icon.Large)` or `s(fill,$size.row.Small)`, kept as `sref(…)` in the element's row. It takes a token of space or size, and refuses a line's width, as `s($stroke.width.QuoteRule,40)`, so a rule as wide as a width token is drawn as a vector line, `v(nodes[…],edges[…]) st[($color.x,w($stroke.width.QuoteRule))]`. A film's times can't be, by its docs, so each is a number. An icon made with `svg(icon:…)` and sized as `s($size.icon.Regular,$size.icon.Regular)` was drawn 208 square, and a number sized it.
 - A stroke takes no room, where the app's edge does, so what has an edge is inset a pixel more.
+- A stroke takes a width for each side, as `w(t,r,b,l)`, but drawn inside a frame it still takes no room, so what the frame holds is centred over the edge rather than above it. A bar or a row with a line under it is drawn as a frame of its height holding the row and a line a pixel tall, which the app's centres as it does.
 - Text keeps the fraction of a pixel it measures, where the app rounds its width up to a whole one, so a button, a chip or a pill that hugs its words is up to a pixel narrower. GPUI does the rounding, in `elements/text.rs`, and it rounds what it measures up to a device pixel after that in any case, in `taffy.rs`. Brilliant's snapping to the pixel grid is for moving, resizing and making an element, and no setting was found that rounds a text's own width.
 - A colour on an inline `svg()` is a token once its stroke is written with a width, such as `st[($color.x,w($edge.width))]`. A colour in the SVG's own text is a plain value that no test of the tokens sees.
 - A text set by its font's tokens one by one, with no type's token, keeps each of them in its row, as `t("A",SF Pro Display:$font.family.title,24:$font.size.PageTitle,m:$font.weight.emphasis,lh(1.6071:$font.lineHeight.Body),ls(0.324px:$font.letterSpacing.PageTitle))`. With a type's token as well, such as `$typography.Strong`, the row kept the type's token and none of the font's.
@@ -66,6 +69,7 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - `delete()` takes one ID to a row. A list of them is taken as one name, and answered as already absent.
 - `delete()` is a row of its own. Written among a row's properties, as `<id> delete()`, it deleted nothing, and nothing said so.
 - A row that's only an ID and `parent(<id>)` moves that element into another, after its children.
+- An element's ID in `parent()`, `after()`, `before()`, `delete()` or `preview()` is written bare. Written with a `#`, it's read as a ref, and the row is refused or answered as already absent.
 - In a text, `\n` is a line break, and `\\n` is the two characters.
 - A frame laid out with `x(sb)` sets a lone child in its middle.
 - A file sent with `edit` again within two minutes answers the first run and changes nothing. A `#ref` from an earlier call still names its element, and a row that names it changes that element.

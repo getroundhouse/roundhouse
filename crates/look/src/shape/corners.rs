@@ -14,13 +14,13 @@ named! {
     /// A corner, by what it's on. [`Shaped::corners`] rounds an element's as one.
     Corner {
         /// Something to use, such as a button, a field, a switch, a row to choose in a list, as Settings' pages and
-        /// the outline's are, or the kit's menus and tooltips, and what's set small beside them, in a chat's column or
+        /// the outline's are, or in a menu, and a tooltip, and what's set small beside them, in a chat's column or
         /// inside a card, such as a pill, a chip, a prompt's bubble, a prompt waiting in the queue, an attachment, a
         /// question's option or what a question's tool was given.
         Control,
         /// A card, and what the app draws over the rest, such as the outline, the find bar or what a hover shows, a
-        /// dialog, a composer, and the question panel in its place, and what's set across a chat's column, such as a
-        /// card in the chat, a call's block, the compaction's summary or the queue.
+        /// menu, a dialog, a composer, and the question panel in its place, and what's set across a chat's column, such
+        /// as a card in the chat, a call's block, the compaction's summary or the queue.
         Card,
         /// A control about as tall as a line of text, such as Settings' key or a question's checkbox.
         InlineControl,

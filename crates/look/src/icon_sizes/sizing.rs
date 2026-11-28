@@ -21,15 +21,16 @@ named! {
         /// Among body text: a warning before the body text it warns of, such as an account's standing; the microphone
         /// at the start of a prompt said out loud; a project's chevron after its name; the arrow before an answer to a
         /// question, and the check on an option chosen; a file sent with a prompt waiting in the queue; a draft's
-        /// pencil at a workspace's row's end; the arrow that reopens a closed chat, in its menu; the glass in a search
-        /// field; the arrow after a pull request's number; and the update card's details. Beside a regular button's
-        /// words, and a small or regular button's own, as a square, such as Send, a tab's close or closed chats.
+        /// pencil at a workspace's row's end; the glass in a search field; the arrow after a pull request's number;
+        /// and the update card's details. Beside a regular button's words, and a small or regular button's own, as a
+        /// square, such as Send, a tab's close or closed chats.
         Regular,
         /// Standing for what a row, a tab, a bar, a card or a call's line is, at its start, in the place a workspace or
         /// a chat has its mark: a file's or a folder's, in All files or Changes; a place's or a project's in the
         /// sidebar; a page's in Settings; an account's; a file tab's, and a subagent's, on its tab and its bar; a
         /// file's card, sent with a prompt; a failed request's; and a call's kind, or the chevron that takes its place,
-        /// and the robot of a subagent at work. Beside a large button's words, and a large button's own.
+        /// and the robot of a subagent at work. Beside a large button's words, and a large button's own, and on a
+        /// menu's row, whether it's the row's icon or its check.
         Large,
     }
 }

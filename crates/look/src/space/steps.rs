@@ -17,13 +17,13 @@ named! {
         /// and above and below a prompt waiting in the queue or a question's option.
         Small,
         /// Around what's in a card, such as the update card, the workspace's card or a turn's card, and between the
-        /// parts of the update card or a question; at both ends of Changes' bar, the pull request's bar and a file's
-        /// path, and where a tab starts; at the sides of a call's block; and between an icon and its words in Settings'
-        /// pages and Home's rows.
+        /// parts of the update card or a question; at the end of every bar, and where a tab starts; at the sides of a
+        /// call's block; at the ends of a large row, such as Home's, and between what's in it; and between an account's
+        /// picture, its name and what's said of it.
         Medium,
-        /// At the sides of the chat's column and under the composer; where the workspace's header and Home's bar start,
-        /// and at both ends of an image's comparison's bar, a subagent's bar and Home's rows; around Agents' panel;
-        /// and between the settings on a page and the parts of an account's row.
+        /// At the sides of the chat's column and under the composer; where what's in every bar starts, such as the
+        /// workspace's header, Home's bar and the bar under an image's comparison; around Agents' panel; and between
+        /// the settings on a page, and between an account's row and its menu.
         Large,
         /// Around what's in Agents' panel, and around a picture in the file viewer or an image's comparison; under a
         /// setting; between the two sides in the bar under an image's comparison's; and the least room between the two
