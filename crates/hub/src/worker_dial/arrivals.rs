@@ -31,6 +31,22 @@ impl Arrivals {
         self.arrived.send_modify(|count| *count = count.wrapping_add(1));
     }
 
+    /// Returns once the instance's worker has dialed and nobody has taken it up, which a worker whose hub still holds a
+    /// connection to it does once its own timer says that connection has dropped, before the hub's does.
+    pub(super) async fn dialed_again(&self, instance_id: &InstanceId) {
+        let mut arrived = self.arrived.subscribe();
+        loop {
+            let waiting =
+                self.waiting.lock().get(instance_id).is_some_and(|dialed| dialed.connection.close_reason().is_none());
+            if waiting {
+                return;
+            }
+            if arrived.changed().await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        }
+    }
+
     /// The instance's worker, once it has dialed, if it does within `within`.
     pub(super) async fn take(&self, instance_id: &InstanceId, within: Duration) -> Option<Dialed> {
         let mut arrived = self.arrived.subscribe();

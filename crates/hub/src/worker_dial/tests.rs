@@ -57,6 +57,28 @@ async fn a_ticket_admits_one_worker_once_and_that_worker_again_by_its_key() {
     assert!(dial.worker(&"w".into(), WITHIN).await.is_some(), "and its connection is the instance's from then on");
 }
 
+/// So a hub that still holds a worker's connection learns, from the worker's own dial, that the worker has given up on
+/// it, which the worker's timer can say before the hub's does.
+#[tokio::test]
+async fn a_worker_dialing_again_is_heard_while_the_connection_it_left_is_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let dial = listening(dir.path()).await;
+    let ticket = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
+    let worker = WorkerEndpoint::bind(&ticket.hub, None, None).await.unwrap();
+    let (_first, first) = dial_as(&worker, &ticket).await;
+    admitted_as(first);
+    let _taken = dial.worker(&"w".into(), WITHIN).await.unwrap();
+    let id = InstanceId::from("w");
+
+    let heard_before = tokio::time::timeout(Duration::from_millis(300), dial.dialed_again(&id)).await.is_ok();
+    let (_again, again) = dial_as(&worker, &ticket).await;
+    admitted_as(again);
+    let heard = tokio::time::timeout(WITHIN, dial.dialed_again(&id)).await.is_ok();
+
+    assert!(!heard_before, "one connection is no sign of another");
+    assert!(heard);
+}
+
 /// Only the newest ticket of an instance's admits a worker, so one handed to a provider that didn't use it is no use
 /// to anyone else.
 #[tokio::test]

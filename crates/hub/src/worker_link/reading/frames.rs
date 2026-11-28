@@ -11,7 +11,7 @@ use providers::Provider;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tracing::{Instrument as _, debug, error_span, warn};
+use tracing::{Instrument as _, debug, error_span, info, warn};
 
 fn unreadable_reply(error: &serde_json::Error) -> ApiError {
     ApiError::new(
@@ -58,7 +58,16 @@ pub(in super::super) async fn read_frames(
 ) {
     let mut incoming = FrameReader::new(reader);
     loop {
-        let bytes = match incoming.next().await {
+        // The worker's own timer can say its connection has dropped before the hub's does, and it then dials again.
+        // That's the worker's word that this connection is no use, so the hub lets go of it for the new one.
+        let read = tokio::select! {
+            read = incoming.next() => read,
+            () = hub.dial.dialed_again(&instance_id), if link.connection_dropped() => {
+                info!(name: "worker.dialed_again", %instance_id, "A worker dialed again, so its old connection is let go");
+                break;
+            }
+        };
+        let bytes = match read {
             Ok(Some(bytes)) => bytes,
             Ok(None) => break,
             Err(e) => {
@@ -69,20 +78,7 @@ pub(in super::super) async fn read_frames(
         let parsed = match frame::decode::<WorkerFrame>(bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
-                // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
-                // the connection closes.
-                if let Some(id) = frame::reply_id(bytes) {
-                    link.calls.reply(id, Err(unreadable_reply(&e)));
-                } else if let Some(id) = AskId::of_unreadable(bytes) {
-                    refuse_unreadable(&hub, &link, id, &e);
-                } else {
-                    warn!(
-                        name: "worker.frame_unread",
-                        kind = ?e.classify(),
-                        column = e.column(),
-                        "Ignoring a worker's frame that didn't parse"
-                    );
-                }
+                frame_unread(&hub, &link, bytes, &e);
                 continue;
             }
         };
@@ -113,12 +109,51 @@ pub(in super::super) async fn read_frames(
             None => route(&hub, &link, parsed).await,
         }
     }
+    connection_ended(&hub, provider.as_ref(), &link, &workspace_id, &instance_id).await;
+}
+
+/// A frame from a worker that doesn't parse, which is a newer worker's, as after a rollback.
+fn frame_unread(hub: &Hub, link: &Arc<WorkerLink>, bytes: &[u8], e: &serde_json::Error) {
+    // A reply from a newer worker ends its call rather than leaving it to wait until the connection closes.
+    if let Some(id) = frame::reply_id(bytes) {
+        link.calls.reply(id, Err(unreadable_reply(e)));
+    } else if let Some(id) = AskId::of_unreadable(bytes) {
+        refuse_unreadable(hub, link, id, e);
+    } else {
+        warn!(
+            name: "worker.frame_unread",
+            kind = ?e.classify(),
+            column = e.column(),
+            "Ignoring a worker's frame that didn't parse"
+        );
+    }
+}
+
+/// What becomes of the worker once its stream has ended: nothing, if the hub left it for the next hub, it's waited for,
+/// if its connection dropped, and otherwise it's gone.
+async fn connection_ended(
+    hub: &Arc<Hub>,
+    provider: &dyn Provider,
+    link: &Arc<WorkerLink>,
+    workspace_id: &WorkspaceId,
+    instance_id: &InstanceId,
+) {
     debug!(name: "worker.connection_ended", %instance_id, "Worker connection ended");
-    // Wakes each waiting call with an error.
+    // Wakes each waiting call with an error, as for a worker that's gone, and none is sent again over the next
+    // connection: what it asked for may have been done, and no request of the worker's is safe to send twice but the
+    // few the hub already repeats, such as the sets of tool servers and credentials, which the next link greets the
+    // worker with anyway. A prompt that was on its way is dropped, as one sent to an agent that's gone is. Each
+    // caller has handled a worker that's gone, so none needs more. What's sent next waits for the worker instead, as
+    // `LiveSession::deliver` says.
     link.calls.end();
     // A worker the hub left running has gone on to the next hub, and nothing of it has gone.
     if !link.left.load(Ordering::SeqCst) {
-        hub.worker_gone(&workspace_id, &link, provider.as_ref(), &instance_id).await;
+        if link.connection_dropped() {
+            // No goodbye, so nothing says the worker has gone: it's waited for, and dials again.
+            hub.worker_disconnected(workspace_id, link, instance_id).await;
+        } else {
+            hub.worker_gone(workspace_id, link, provider, instance_id).await;
+        }
     }
     // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
     // the value unset, and whoever waits later would wait forever.

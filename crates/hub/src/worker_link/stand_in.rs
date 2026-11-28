@@ -89,6 +89,7 @@ impl WorkerLink {
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            stopping: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::from(version),
             tool_servers: watch::Sender::default(),

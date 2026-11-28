@@ -77,7 +77,7 @@ jobs:
       # bash has it.
       - run: >-
           cargo test --locked -p daemon --test e2e --
-          dialing:: carrying_on:: disconnected:: misbehaving_worker:: worker_state:: environment::a_setup_script_on_windows_runs_in_gits_bash
+          dialing:: carrying_on:: disconnected:: dropped:: misbehaving_worker:: worker_state:: environment::a_setup_script_on_windows_runs_in_gits_bash
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts

@@ -20,7 +20,7 @@ use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
 impl Hub {
-    pub(super) fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
+    pub(in crate::hub) fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
         self.worker_gates.lock().entry(workspace_id.clone()).or_default().clone()
     }
 
@@ -57,10 +57,10 @@ impl Hub {
             return Ok(found);
         }
         // Starting a worker would end the one an earlier hub left there, which may be at work, so it's waited for.
-        if self.disconnected.lock().contains(workspace_id) {
+        if self.disconnected.contains(workspace_id) {
             return Err(ApiError::new(
                 ErrorCode::Unavailable,
-                "the workspace's worker hasn't connected to the hub since it started, and is waited for rather than replaced",
+                "the workspace's worker isn't connected to the hub, and is waited for rather than replaced",
             ));
         }
         let workspace = self.workspace(workspace_id).await?;
@@ -122,7 +122,8 @@ impl Hub {
         let mut cleared = gate.lock().await;
         let log = protocol::paths::worker_log(&self.worker_logs_dir, &workspace.instance_id);
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id);
-        let link = match WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::LeftRunning).await {
+        let opening = Opening::LeftRunning { disconnected_for: self.disconnected.for_how_long(&workspace.id) };
+        let link = match WorkerLink::open(self.clone(), provider, id, instance_id, &log, opening).await {
             Ok(link) => link,
             // One that hasn't dialed, and isn't said to be gone, may be at work yet, so it's left, and waited for.
             Err(e) if e.code == ErrorCode::Unavailable => return Err(e),

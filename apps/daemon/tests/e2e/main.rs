@@ -32,6 +32,7 @@ mod core_loop;
 mod dialing;
 mod disconnected;
 mod drafts;
+mod dropped;
 mod environment;
 mod failing;
 mod feed;

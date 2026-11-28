@@ -214,6 +214,8 @@ impl LiveSession {
     pub(super) async fn deliver(&self, hub: &Hub, seq: Seq, asking: Asking) {
         let dropped = EventBody::PromptDropped { prompt: seq };
         hub.wait_for_setup(&self.workspace_id).await;
+        // A worker whose connection dropped is waited for, and the prompt, recorded, reaches its agent once it's back.
+        hub.wait_until_connected(&self.workspace_id).await;
         if self.is_closed() {
             return self.record_or_log(Origin::Hub, dropped).await;
         }

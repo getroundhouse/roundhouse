@@ -13,6 +13,9 @@ use protocol::model::{RunId, Seq, SessionId};
 mod tests;
 
 mod disconnected;
+#[cfg(test)]
+pub(crate) use disconnected::Cause;
+pub(crate) use disconnected::Disconnected;
 mod recovery;
 pub(crate) use recovery::LeftAtWork;
 #[cfg(test)]

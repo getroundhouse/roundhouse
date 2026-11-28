@@ -1,4 +1,5 @@
 use super::super::Hub;
+use super::disconnected::Cause;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;
@@ -84,10 +85,9 @@ impl Hub {
         // does.
         self.unkept_observations_gone().await;
         let waiting_for: Vec<SessionId> = {
-            let disconnected = self.disconnected.lock();
             at_work_by_workspace
                 .iter()
-                .filter(|(id, _)| disconnected.contains(*id))
+                .filter(|(id, _)| self.disconnected.contains(id))
                 .flat_map(|(_, ids)| ids)
                 .cloned()
                 .collect()
@@ -165,7 +165,7 @@ impl Hub {
                 %workspace_id,
                 "The worker an earlier hub left hasn't dialed this one, so it's waited for"
             );
-            self.disconnected.lock().insert(workspace_id.clone());
+            self.disconnected.mark(&workspace_id, Cause::LeftByEarlierHub);
             let span = spans::workspace(&workspace_id);
             tokio::spawn(self.clone().wait_for_worker(workspace_id).instrument(span));
         }
