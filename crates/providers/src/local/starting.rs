@@ -26,8 +26,12 @@ pub(super) async fn start_dialing(
         std::fs::create_dir_all(dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))?;
     }
     let mut command = tokio::process::Command::new(&config.worker_exe);
+    command.args(["worker", "--ticket", "-", "--detach"]);
+    if let Some(file) = &config.hub_address_file {
+        command.arg("--hub-address-file").arg(file);
+    }
     command
-        .args(["worker", "--ticket", "-", "--detach", "--log"])
+        .arg("--log")
         .arg(&log)
         .arg("--workspaces-root")
         .arg(&config.workspaces_root)

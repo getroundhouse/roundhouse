@@ -164,6 +164,7 @@ async fn main() {
         worker_logs_dir: args.instances,
         environment: process::Environment::NONE,
         dials: true,
+        hub_address_file: None,
     });
     let environment = WorkerEnvironment {
         filesystem: if args.separate { WorkerFilesystem::Separate } else { WorkerFilesystem::Hub },

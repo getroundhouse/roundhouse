@@ -27,6 +27,8 @@ pub struct HubConfig {
     pub network_address: std::net::SocketAddr,
     /// Which relays the endpoint that workers dial uses.
     pub relays: dialing::Relays,
+    /// Which ports its endpoints bind where they have no relays, which a test's hub is given apart from every other's.
+    pub endpoint_ports: crate::EndpointPorts,
     pub paths: Paths,
     /// The binary that runs a worker, which the local provider starts, and which the login shell runs to print the
     /// environment the profile gives, as [`process::PRINTS_ENVIRONMENT`] asks.
@@ -122,6 +124,7 @@ fn load_providers(
         worker_logs_dir: paths.worker_logs_dir.clone(),
         environment: machine.given(),
         dials: true,
+        hub_address_file: Some(paths.data_dir.join(protocol::paths::LOOPBACK_WORKER_ADDRESS_FILE)),
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
     let hello_within = timers.adapter_hello_within;
@@ -146,6 +149,7 @@ pub enum Ended {
 /// is using these paths.
 pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Result<Ended, HubError> {
     let (update_feed, relays) = (config.update_feed, config.relays);
+    let endpoint_ports = config.endpoint_ports;
     let HubConfig {
         network_address, build, paths, worker_exe, shell, home, path, start, agents, timers, github, ..
     } = config;
@@ -164,7 +168,7 @@ pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Res
     let machine = read_machine_environment(shell.as_deref(), home.as_deref(), &worker_exe, path.as_deref()).await;
     let providers = load_providers(build, &paths, worker_exe, &machine, &store, &timers)?;
     let github = Github::new(github);
-    let dirs = HubDirs { network_address, relays, ..HubDirs::of(&paths) };
+    let dirs = HubDirs { network_address, relays, endpoint_ports, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));
     // Before any client is served, so none is told the hub doesn't read the feed while it's starting to.
     read_update_feed(&hub, update_feed, build);

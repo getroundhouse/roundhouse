@@ -19,6 +19,8 @@ pub(crate) struct HubDirs {
     pub(crate) network_address: std::net::SocketAddr,
     /// Which relays the endpoint that workers dial uses.
     pub(crate) relays: dialing::Relays,
+    /// Which ports the hub's endpoints bind where they have no relays.
+    pub(crate) endpoint_ports: crate::EndpointPorts,
 }
 
 impl HubDirs {
@@ -42,6 +44,7 @@ impl HubDirs {
             service_builds: paths.service_builds_dir(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
             relays: dialing::Relays::N0,
+            endpoint_ports: crate::EndpointPorts::PRODUCT,
         }
     }
 
@@ -57,6 +60,7 @@ impl HubDirs {
             service_builds: dir.join("service"),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
             relays: dialing::Relays::None,
+            endpoint_ports: crate::EndpointPorts::PRODUCT,
         }
     }
 }

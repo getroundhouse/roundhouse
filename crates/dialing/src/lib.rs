@@ -8,10 +8,12 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+pub mod address_file;
 mod admission;
 mod error;
 mod hub_endpoint;
 mod key_file;
+mod private_file;
 mod worker_endpoint;
 
 #[cfg(test)]
@@ -19,7 +21,7 @@ mod tests;
 
 pub use admission::{read_frame, write_frame};
 pub use error::DialError;
-pub use hub_endpoint::{HubEndpoint, Relays};
+pub use hub_endpoint::{HubEndpoint, LOOPBACK_PORTS, Ports, Relays};
 pub use iroh::endpoint::{Connection, Incoming, RecvStream, SendStream};
 pub use worker_endpoint::{Admitted, WorkerEndpoint};
 

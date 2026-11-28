@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 iroh.workspace = true
+parking_lot.workspace = true
 private-files.workspace = true
 protocol.workspace = true
 serde.workspace = true

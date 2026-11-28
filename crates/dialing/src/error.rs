@@ -17,4 +17,8 @@ pub enum DialError {
     Said(String),
     #[error("the hub refused the worker: {0}")]
     Refused(String),
+    #[error("reading or writing {path}: {why}")]
+    AddressFile { path: PathBuf, why: String },
+    #[error("the address file names the endpoint {named}, which isn't the hub the ticket names")]
+    OtherHub { named: String },
 }

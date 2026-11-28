@@ -16,6 +16,14 @@ fn main() -> anyhow::Result<ExitCode> {
         hub_timers: hub::Timers::from_env(var),
         worker_timers: worker::Timers::from_env(var),
         github: hub::GithubConfig::from_env(var),
+        endpoint_ports: match var(protocol::testing::ENV_TEST_ENDPOINT_PORTS) {
+            Some(first) => first
+                .parse()
+                .ok()
+                .and_then(hub::EndpointPorts::for_a_test)
+                .ok_or_else(|| anyhow::anyhow!("{first} isn't the first of a test hub's ports"))?,
+            None => hub::EndpointPorts::PRODUCT,
+        },
         relays: if var(protocol::testing::ENV_TEST_NO_RELAYS).is_some() { hub::Relays::None } else { hub::Relays::N0 },
         stops_with: Box::pin(TestProcess::until_gone(TestProcess::from_env(var))),
         also_forgotten: &protocol::testing::ENV_TEST,

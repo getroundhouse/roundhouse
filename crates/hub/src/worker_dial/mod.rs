@@ -11,4 +11,5 @@ mod arrivals;
 mod dial;
 
 pub(crate) use arrivals::Dialed;
+pub use dial::EndpointPorts;
 pub(crate) use dial::{Endpoint, WorkerDial};

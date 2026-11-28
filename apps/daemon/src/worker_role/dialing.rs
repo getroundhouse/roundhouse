@@ -3,13 +3,15 @@
 //! forwarded port, has it bind the port and advertise the mapped address, so the hub opens a direct path to it.
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::Context;
 use dialing::{Admitted, DialError, WorkerEndpoint};
 use protocol::dialing::WorkerTicket;
-use tracing::info;
+use tracing::{debug, info, warn};
 use worker::DialFailed;
 
 use crate::runtime::run_to_end;
@@ -30,6 +32,8 @@ pub(crate) struct Dial {
     pub(crate) port: Option<u16>,
     /// Where the hub can reach it directly, such as the host's end of that forwarded port.
     pub(crate) advertise: Option<SocketAddr>,
+    /// Where the hub says its loopback endpoint is now, as `dialing::address_file` says, for a local worker.
+    pub(crate) hub_address_file: Option<PathBuf>,
     /// Whether to start it apart from whatever ran this, and return once it has started.
     pub(crate) detach: bool,
 }
@@ -40,7 +44,10 @@ pub(crate) const TICKET_ON_STDIN: &str = "-";
 
 /// In the worker's state directory, which it claims first, so a second worker started there by mistake leaves the
 /// first to serve it.
-pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: Dial) -> anyhow::Result<()> {
+pub(crate) fn dial(
+    mut given: Given,
+    Dial { ticket, port, advertise, hub_address_file, detach }: Dial,
+) -> anyhow::Result<()> {
     let on_stdin = ticket.as_str() == TICKET_ON_STDIN;
     let ticket = if on_stdin {
         let mut read = String::new();
@@ -64,10 +71,16 @@ pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: D
     run_to_end(async move {
         let endpoint = Arc::new(WorkerEndpoint::bind(&ticket.hub, port, advertise).await?);
         info!(name: "hub.dialing", key = endpoint.key(), port = ?port, advertise = ?advertise, "Dialing the hub");
+        let looking_up = Arc::new(LookingUp { file: hub_address_file, told_of_another: AtomicBool::new(false) });
         let dial = || {
-            let (endpoint, secret) = (endpoint.clone(), ticket.secret.clone());
+            let (endpoint, secret, looking_up) = (endpoint.clone(), ticket.secret.clone(), looking_up.clone());
             async move {
-                let admitted = tokio::time::timeout(DIAL_WITHIN, endpoint.dial_admitted(&secret)).await;
+                let dial_once = || tokio::time::timeout(DIAL_WITHIN, endpoint.dial_admitted(&secret));
+                let mut admitted = dial_once().await;
+                // Where the hub is now, at once, rather than after the pause before the next dial.
+                if !matches!(admitted, Ok(Ok(_) | Err(DialError::Refused(_)))) && looking_up.again(&endpoint) {
+                    admitted = dial_once().await;
+                }
                 match admitted {
                     Ok(Ok(Admitted { connection, send, recv, instance_id })) => {
                         info!(name: "hub.admitted", %instance_id, "The hub admitted this worker");
@@ -84,6 +97,42 @@ pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: D
         endpoint.close().await;
         served.map_err(anyhow::Error::from)
     })?
+}
+
+/// Where to look the hub up again once a dial has failed, as `dialing::address_file` says.
+struct LookingUp {
+    file: Option<PathBuf>,
+    /// Whether the worker has said the file names another hub than its ticket, which it says once.
+    told_of_another: AtomicBool,
+}
+
+impl LookingUp {
+    /// Has `endpoint` dial the hub where the file says it is now, if it says somewhere else, and it's the ticket's hub,
+    /// and says whether it does.
+    fn again(&self, endpoint: &WorkerEndpoint) -> bool {
+        let Some(file) = &self.file else { return false };
+        let address = match dialing::address_file::read(file) {
+            Ok(address) => address,
+            Err(e) => {
+                debug!(name: "hub.address_unread", error = %e, "Couldn't read where the hub is now");
+                return false;
+            }
+        };
+        match endpoint.moved_to(&address) {
+            Ok(moved) => {
+                if moved {
+                    info!(name: "hub.moved", direct = ?address.direct, "The hub is somewhere else now, where it's dialed from now on");
+                }
+                moved
+            }
+            Err(e) => {
+                if !self.told_of_another.swap(true, Ordering::Relaxed) {
+                    warn!(name: "hub.address_of_another", error = %e, "The hub's address file names another hub, so it isn't dialed there");
+                }
+                false
+            }
+        }
+    }
 }
 
 /// This command again, without `--detach`, apart from this process, as `process::detach` starts it, so nothing that

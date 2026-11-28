@@ -24,6 +24,10 @@ pub(crate) struct WorkerReach {
     /// An address the hub can reach the worker at directly, such as the far end of that forwarded port.
     #[arg(long, requires = "ticket")]
     advertise: Option<std::net::SocketAddr>,
+    /// Where the hub writes where its loopback endpoint is now, which the worker reads once a dial has failed, to find
+    /// a hub that came back on another port. Its key has to be the ticket's. Given by the local provider.
+    #[arg(long, requires = "ticket")]
+    hub_address_file: Option<std::path::PathBuf>,
 }
 
 impl WorkerReach {
@@ -32,8 +36,14 @@ impl WorkerReach {
     pub(crate) fn transport(self, detach: bool) -> Transport {
         match self {
             Self { attach: true, .. } => Transport::Attach,
-            Self { ticket: Some(ticket), port, advertise, .. } => {
-                Transport::Dial(crate::worker_role::Dial { ticket: ticket.into(), port, advertise, detach })
+            Self { ticket: Some(ticket), port, advertise, hub_address_file, .. } => {
+                Transport::Dial(crate::worker_role::Dial {
+                    ticket: ticket.into(),
+                    port,
+                    advertise,
+                    hub_address_file,
+                    detach,
+                })
             }
             Self { .. } => Transport::Stdio,
         }

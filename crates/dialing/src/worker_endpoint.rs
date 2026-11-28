@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::net::{Ipv4Addr, SocketAddr};
 
 use std::time::Duration;
@@ -5,6 +6,7 @@ use std::time::Duration;
 use iroh::endpoint::PortmapperConfig;
 use iroh::endpoint::{Connection, IdleTimeout, QuicTransportConfig, RecvStream, SendStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl};
+use parking_lot::Mutex;
 use protocol::dialing::{HubAddress, TicketSecret, WORKER_ALPN};
 use protocol::model::InstanceId;
 
@@ -20,6 +22,15 @@ const KEEP_ALIVE_EVERY: Duration = Duration::from_secs(1);
 /// seconds is for a path across networks, which can go quiet for a while and come back.
 const NO_RELAY_IDLE_WITHIN: Duration = Duration::from_secs(3);
 
+/// How long a dial to a hub with no relay has to finish its handshake, after which it's given up and dialed again. On
+/// loopback a handshake takes about a millisecond, and a few in a debug build on a busy machine, so this is a hundred
+/// times that and more. It's what bounds how long a worker keeps dialing a port its hub has left: without it, a dial
+/// there waits out the 3 s [`NO_RELAY_IDLE_WITHIN`], and only then does the worker read the hub's address file and find
+/// it where it moved, against the 5 s the next hub waits for it. A handshake that's slower still, on a machine so busy
+/// it stalls this long, is cut short and dialed again, after a pause that grows to a second, so the worker reaches its
+/// hub once the machine lets a handshake through in time, and the hub drops the half it saw.
+const NO_RELAY_HANDSHAKE_WITHIN: Duration = Duration::from_millis(250);
+
 /// A worker its hub admitted, with the stream the hub did so on.
 pub struct Admitted {
     pub instance_id: InstanceId,
@@ -33,7 +44,8 @@ pub struct Admitted {
 /// the process does, which the hub knows it by once it has been admitted.
 pub struct WorkerEndpoint {
     pub(crate) endpoint: Endpoint,
-    hub: EndpointAddr,
+    /// Where it dials the hub, which is where its ticket says until the hub's address file says the hub has moved.
+    hub: Mutex<EndpointAddr>,
 }
 
 impl WorkerEndpoint {
@@ -78,12 +90,49 @@ impl WorkerEndpoint {
             builder = builder.external_addr(external);
         }
         let endpoint = builder.bind().await.map_err(|e| DialError::Bind(e.to_string()))?;
-        Ok(Self { endpoint, hub: addr })
+        Ok(Self { endpoint, hub: Mutex::new(addr) })
     }
 
     /// A connection to the hub, which says nothing yet.
+    /// A hub with no relay has [`NO_RELAY_HANDSHAKE_WITHIN`] to finish the handshake, while one dialed through a
+    /// relay, across networks, has as long as iroh gives it.
     pub async fn dial(&self) -> Result<Connection, DialError> {
-        self.endpoint.connect(self.hub.clone(), WORKER_ALPN).await.map_err(|e| DialError::Dial(e.to_string()))
+        let hub = self.hub.lock().clone();
+        let direct = hub.relay_urls().next().is_none();
+        let connecting = self.endpoint.connect(hub, WORKER_ALPN);
+        let connected = if direct {
+            tokio::time::timeout(NO_RELAY_HANDSHAKE_WITHIN, connecting)
+                .await
+                .map_err(|_| DialError::Dial(format!("no handshake within {NO_RELAY_HANDSHAKE_WITHIN:?}")))?
+        } else {
+            connecting.await
+        };
+        connected.map_err(|e| DialError::Dial(e.to_string()))
+    }
+
+    /// Dials the hub at `address`'s direct addresses from now on, as the hub's address file gives them, if it names
+    /// the key the ticket does, and returns whether that's somewhere else than before. A file that names another key
+    /// is [`DialError::OtherHub`], and changes nothing, since the file says only where the hub is: who it is is the
+    /// ticket's to say. The relay stays the ticket's.
+    pub fn moved_to(&self, address: &HubAddress) -> Result<bool, DialError> {
+        let mut hub = self.hub.lock();
+        if address.key != hub.id.to_string() {
+            return Err(DialError::OtherHub { named: address.key.clone() });
+        }
+        let now: BTreeSet<SocketAddr> = hub.ip_addrs().copied().collect();
+        let given: BTreeSet<SocketAddr> = address.direct.iter().copied().collect();
+        if given.is_empty() || given == now {
+            return Ok(false);
+        }
+        let mut moved = EndpointAddr::new(hub.id);
+        for direct in given {
+            moved = moved.with_ip_addr(direct);
+        }
+        if let Some(relay) = hub.relay_urls().next() {
+            moved = moved.with_relay_url(relay.clone());
+        }
+        *hub = moved;
+        Ok(true)
     }
 
     /// A connection to the hub that has admitted this worker with `secret`, or with the key it admitted it by before,

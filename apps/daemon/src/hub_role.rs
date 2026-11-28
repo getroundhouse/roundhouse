@@ -41,6 +41,7 @@ pub(crate) fn run(start: HubStart, given: Config) -> anyhow::Result<ExitCode> {
     let config = hub::HubConfig {
         network_address,
         relays: given.relays,
+        endpoint_ports: given.endpoint_ports,
         build: given.build,
         paths,
         worker_exe,

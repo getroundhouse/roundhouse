@@ -166,7 +166,7 @@ impl Hub {
         let observations = Arc::new(Observations::open(cache_file.clone(), &store));
         Self {
             remote: crate::remote::Remote::new(dirs.remote()),
-            dial: WorkerDial::new(&dirs.data, dirs.relays, store.clone()),
+            dial: WorkerDial::new(&dirs.data, dirs.relays, dirs.endpoint_ports.clone(), store.clone()),
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),

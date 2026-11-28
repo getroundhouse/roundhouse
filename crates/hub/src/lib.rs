@@ -40,6 +40,7 @@ pub use crate::error::HubError;
 pub use crate::hub::UpdateFeed;
 pub use crate::run::{Ended, HubConfig, run};
 pub use crate::timers::Timers;
+pub use crate::worker_dial::EndpointPorts;
 pub use dialing::Relays;
 pub use github::GithubConfig;
 #[cfg(any(test, feature = "testing"))]

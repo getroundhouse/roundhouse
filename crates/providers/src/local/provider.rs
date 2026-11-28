@@ -36,6 +36,10 @@ pub struct LocalConfig {
     /// runs `worker --stdio` and they stop with it. Only the hub's own tests turn it off, to stand a script in for a
     /// worker on its stdin and stdout, which couldn't dial.
     pub dials: bool,
+    /// Where the hub writes its loopback endpoint's address, which a worker that dials reads once a dial has failed,
+    /// to find a hub that came back on another port. `None` for a worker that dials another endpoint, as an adapter's
+    /// in a test does.
+    pub hub_address_file: Option<PathBuf>,
 }
 
 pub struct LocalProvider {
