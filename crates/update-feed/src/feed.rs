@@ -170,13 +170,13 @@ impl Feed {
     }
 
     /// Why a build with `floors` would leave an app on some release in this feed with none to step to, so that no
-    /// release of that build, or after it, could be the app's next step, if it would. `keeps_workers` says whether
-    /// the feed's apps keep their workers through an update, so they step through each break in the worker protocol,
-    /// as on a Mac and on Linux. A release from before releases said what they speak leaves nothing to check of them.
-    pub fn stranded_by(&self, floors: Floors, keeps_workers: bool) -> Result<Option<Stranded<'_>>, BadVersion> {
+    /// release of that build, or after it, could be the app's next step, if it would. Every platform's apps keep their
+    /// workers through an update, so they step through each break in the worker protocol. A release from before
+    /// releases said what they speak leaves nothing to check of them.
+    pub fn stranded_by(&self, floors: Floors) -> Result<Option<Stranded<'_>>, BadVersion> {
         let Some(newest) = self.newest()? else { return Ok(None) };
         let newest_speaks = newest.worker_versions.map(|its| its.newest);
-        if keeps_workers && newest_speaks.is_some_and(|its| floors.workers.oldest > its) {
+        if newest_speaks.is_some_and(|its| floors.workers.oldest > its) {
             return Ok(Some(Stranded::Workers(newest)));
         }
         let Some(floor) = floors.release else { return Ok(None) };
@@ -185,9 +185,6 @@ impl Feed {
         }
         if !self.steps()?.contains(&order_of(floor)?) {
             return Ok(Some(Stranded::NotKept));
-        }
-        if !keeps_workers {
-            return Ok(None);
         }
         let mut last: Option<([u64; 3], Release<'_>)> = None;
         for release in self.releases() {

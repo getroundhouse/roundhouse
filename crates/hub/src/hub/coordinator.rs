@@ -45,10 +45,6 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, watch};
 use tool_sign_in::{CLIENT_DOCUMENT, ToolSignIn};
 use tracing::{Span, warn};
 
-/// Whether a restart leaves the hub's workers running, as it does wherever the local provider's workers dial the hub. On
-/// Windows they don't, and run on the hub's pipes, so they stop with it.
-pub(super) const KEEPS_WORKERS: bool = providers::local::LocalConfig::DIALS;
-
 pub(crate) struct Hub {
     pub(super) build: Build,
     pub(super) store: Arc<Store>,
@@ -348,7 +344,8 @@ impl Hub {
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
             keeping_awake: self.awake.holding(),
-            keeps_workers: KEEPS_WORKERS,
+            // Every worker dials its hub, and a restart leaves them running.
+            keeps_workers: true,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
             oldest_running_worker_protocol: Some(oldest_running_worker_protocol),
             open_terminals: u32::try_from(self.terminals.count()).unwrap_or(u32::MAX),

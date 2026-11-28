@@ -1,6 +1,7 @@
 //! What stands in for process groups and `ps` on Windows: a process's descendants, found from each process's parent,
 //! and its start time, both through the Win32 API. Also which of a process's handles its children get, and a console
-//! of its own for one started apart from this process, and the program each process runs from.
+//! of its own for one started apart from this process, out of this process's job object where the job lets it, and the
+//! program each process runs from.
 //!
 //! A descendant whose own parent has exited isn't found, since nothing links it to the tree any more. A job object
 //! would hold it.
@@ -19,10 +20,14 @@ use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_IN
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::JobObjects::{
+    JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    QueryInformationJobObject,
+};
 use windows_sys::Win32::System::Threading::{
-    CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS,
-    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
+    CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, GetProcessTimes, OpenProcess,
+    PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
 };
 
 use crate::{RunningProgram, Signal};
@@ -125,10 +130,32 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
     }
 }
 
-/// A console of its own with no window, without this process's own input and output.
+/// A console of its own with no window, without this process's own input and output, and out of the job object this
+/// process is in, where the job lets it leave.
 pub(crate) fn detach(command: &mut Command) {
-    without_window(command);
+    let leaves = if job_lets_children_leave() { CREATE_BREAKAWAY_FROM_JOB } else { 0 };
+    command.creation_flags(CREATE_NO_WINDOW | leaves);
     keep_stdio_from_children();
+}
+
+/// Whether this process is in a job object that lets a child it starts leave, as an SSH session's does. Starting a
+/// child that asks to leave a job that doesn't let it fails, as under Cargo, whose job ends what it runs once Cargo
+/// goes. A process in no job has none to leave.
+fn job_lets_children_leave() -> bool {
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    let Ok(size) = u32::try_from(size_of_val(&limits)) else { return false };
+    // SAFETY: a null job is this process's own. The call writes no more than `size` bytes to `limits`, which outlives
+    // it, and nothing to the null length.
+    let read = unsafe {
+        QueryInformationJobObject(
+            std::ptr::null_mut(),
+            JobObjectExtendedLimitInformation,
+            (&raw mut limits).cast(),
+            size,
+            std::ptr::null_mut(),
+        )
+    };
+    read != 0 && limits.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK != 0
 }
 
 pub(crate) fn without_window(command: &mut Command) {

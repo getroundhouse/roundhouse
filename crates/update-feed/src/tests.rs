@@ -82,28 +82,27 @@ fn floors(oldest: u32, release: Option<&'static str>) -> Floors {
     Floors { workers: Versions { oldest, newest: oldest + 1 }, release }
 }
 
-/// A hub that can't talk to the newest release's workers strands the apps with those at work, where apps keep them,
-/// and one that can strands none, however old the releases before it.
+/// A hub that can't talk to the newest release's workers strands the apps with those at work, and one that can strands
+/// none, however old the releases before it.
 #[test]
 fn only_a_hub_past_the_newest_release_s_workers_strands_its_apps() {
     let feed = feed(&format!(r#"{{"Assets":[{},{}]}}"#, full("0.1.10", 4, 5), full("0.1.9", 3, 4)));
 
-    let stranded = feed.stranded_by(floors(6, None), true).unwrap();
+    let stranded = feed.stranded_by(floors(6, None)).unwrap();
 
     let Some(Stranded::Workers(newest)) = stranded else { panic!("{stranded:?}") };
     assert_eq!(newest.version, "0.1.10", "by version, not as text");
-    assert_eq!(feed.stranded_by(floors(5, None), true).unwrap(), None);
-    assert_eq!(feed.stranded_by(floors(4, None), true).unwrap(), None);
-    assert_eq!(feed.stranded_by(floors(6, None), false).unwrap(), None, "where apps keep no workers");
+    assert_eq!(feed.stranded_by(floors(5, None)).unwrap(), None);
+    assert_eq!(feed.stranded_by(floors(4, None)).unwrap(), None);
 }
 
 #[test]
 fn a_feed_from_before_releases_said_or_with_none_strands_nothing() {
     let past = floors(9, None);
 
-    assert_eq!(feed(r#"{"Assets":[{"Version":"0.1.5","Type":"Full"}]}"#).stranded_by(past, true).unwrap(), None);
-    assert_eq!(feed(r#"{"Assets":[{"Version":"0.1.5","Type":"Delta"}]}"#).stranded_by(past, true).unwrap(), None);
-    assert_eq!(feed(r#"{"Assets":[]}"#).stranded_by(past, true).unwrap(), None);
+    assert_eq!(feed(r#"{"Assets":[{"Version":"0.1.5","Type":"Full"}]}"#).stranded_by(past).unwrap(), None);
+    assert_eq!(feed(r#"{"Assets":[{"Version":"0.1.5","Type":"Delta"}]}"#).stranded_by(past).unwrap(), None);
+    assert_eq!(feed(r#"{"Assets":[]}"#).stranded_by(past).unwrap(), None);
 }
 
 #[test]
@@ -111,7 +110,7 @@ fn a_version_that_isnt_three_numbers_is_refused() {
     for version in ["0.1", "0.1.5.1", "0.1.x", "0.1.5-beta"] {
         let feed = feed(&format!(r#"{{"Assets":[{}]}}"#, full(version, 3, 4)));
 
-        assert!(feed.stranded_by(floors(3, None), true).is_err(), "{version}");
+        assert!(feed.stranded_by(floors(3, None)).is_err(), "{version}");
     }
 }
 
@@ -127,23 +126,22 @@ fn across_two_breaks() -> Feed {
 fn a_floor_strands_apps_unless_it_s_a_release_the_feed_keeps_to_step_to() {
     let feed = across_two_breaks();
 
-    let newer = feed.stranded_by(floors(5, Some("0.1.12")), false).unwrap();
+    let newer = feed.stranded_by(floors(5, Some("0.1.12"))).unwrap();
     assert!(matches!(newer, Some(Stranded::Release(newest)) if newest.version == "0.1.11"), "{newer:?}");
-    assert_eq!(feed.stranded_by(floors(5, Some("0.1.8")), false).unwrap(), Some(Stranded::NotKept));
-    assert_eq!(feed.stranded_by(floors(5, Some("0.1.11")), false).unwrap(), None);
-    assert_eq!(feed.stranded_by(floors(5, Some("0.1.9")), false).unwrap(), None);
+    assert_eq!(feed.stranded_by(floors(5, Some("0.1.8"))).unwrap(), Some(Stranded::NotKept));
+    assert_eq!(feed.stranded_by(floors(5, Some("0.1.9"))).unwrap(), None);
 }
 
 /// Only a release whose hub's workers are as new as the build's oldest takes it, so a floor no newer than the last
-/// release before those carries even an app that doesn't read floors, where apps step.
+/// release before those carries even an app that doesn't read floors.
 #[test]
-fn where_apps_step_a_floor_is_no_newer_than_the_last_release_before_the_build_s_oldest_workers() {
+fn a_floor_is_no_newer_than_the_last_release_before_the_build_s_oldest_workers() {
     let feed = across_two_breaks();
 
-    assert_eq!(feed.stranded_by(floors(5, Some("0.1.9")), true).unwrap(), None);
-    let past = feed.stranded_by(floors(5, Some("0.1.11")), true).unwrap();
+    assert_eq!(feed.stranded_by(floors(5, Some("0.1.9"))).unwrap(), None);
+    let past = feed.stranded_by(floors(5, Some("0.1.11"))).unwrap();
     assert!(matches!(past, Some(Stranded::PastTheWorkerStep(Some(last))) if last.version == "0.1.9"), "{past:?}");
-    let none_before = feed.stranded_by(floors(4, Some("0.1.9")), true).unwrap();
+    let none_before = feed.stranded_by(floors(4, Some("0.1.9"))).unwrap();
     assert_eq!(none_before, Some(Stranded::PastTheWorkerStep(None)), "no release in the feed is before workers of 4");
 }
 

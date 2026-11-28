@@ -1,0 +1,18 @@
+[package]
+name = "misbehaving-worker"
+description = "Stands in for a worker that dials its hub and then misbehaves, in tests, as the example misbehaving_worker."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Dev-dependencies, whose features only a build that names an example, test or bench takes in, so a build of the
+# product's code across the workspace, such as `cargo clippy --workspace --locked`, is as it ships.
+[dev-dependencies]
+dialing.workspace = true
+process = { workspace = true, features = ["testing"] }
+protocol.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

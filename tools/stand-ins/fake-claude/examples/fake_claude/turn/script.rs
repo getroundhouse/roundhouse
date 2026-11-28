@@ -8,7 +8,6 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::collections::VecDeque;
-use std::os::unix::process::CommandExt as _;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
@@ -269,11 +268,12 @@ fn late(turn: &Turn, rest: &str) -> bool {
 fn outlive_until(file: &str, lines: &[Value]) {
     let lines: Vec<String> = lines.iter().map(Value::to_string).collect();
     let script = r#"while [ ! -e "$1" ]; do sleep 0.05; done; shift; for line in "$@"; do printf '%s\n' "$line"; done"#;
+    let mut command = std::process::Command::new("sh");
+    process::own_group(&mut command);
     #[expect(clippy::zombie_processes, reason = "never waited on, because the point is that it outlives this process")]
-    std::process::Command::new("sh")
+    command
         .args(["-c", script, "sh", file])
         .args(lines)
-        .process_group(0)
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()

@@ -51,15 +51,17 @@ impl Hub {
         .await
         .unwrap_or_else(|e| Err(format!("the update stopped: {e}")));
         // No request of its own is under way by now: its reply went as it started.
-        let restarted = placed.and_then(|()| self.request_restart(0).map_err(|e| e.message));
-        if let Err(why) = restarted {
-            // Only the store failing to give a revision stops this, which leaves the record saying it's updating.
-            let _ = self
-                .change_update(|found| {
-                    found.failed(why);
-                    Ok(())
-                })
-                .await;
+        match placed {
+            Ok(()) => self.request_restart(0),
+            Err(why) => {
+                // Only the store failing to give a revision stops this, which leaves the record saying it's updating.
+                let _ = self
+                    .change_update(|found| {
+                        found.failed(why);
+                        Ok(())
+                    })
+                    .await;
+            }
         }
     }
 }

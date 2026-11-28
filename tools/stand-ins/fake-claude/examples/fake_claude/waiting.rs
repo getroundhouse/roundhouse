@@ -51,9 +51,10 @@ pub(crate) fn a_prompt_is_queued() {
 
 /// Numbered chunks of the text `FILE:TEXT` gives, until FILE exists. Each is made only once the one before has gone, so
 /// what they're said in ends as soon as the file exists, and they wait on it until then. Each that has gone adds a line
-/// to `FILE.said`, so a test can wait for the agent to have said more.
+/// to `FILE.said`, so a test can wait for the agent to have said more. The text is what follows the last colon, since a
+/// path on Windows has one after its drive.
 pub(crate) fn until(file_and_text: &str) -> impl Iterator<Item = String> + use<> {
-    let (file, text) = file_and_text.split_once(':').unwrap();
+    let (file, text) = file_and_text.rsplit_once(':').unwrap();
     let said = PathBuf::from(format!("{file}.said"));
     let (waiting, text) = (WaitingOn::file(Path::new(file)), text.to_string());
     (0..).map_while(move |i| {

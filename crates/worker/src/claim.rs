@@ -43,7 +43,6 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
 /// Claims the instance for a worker whose state directory is `state_dir`, and that outlives its hub, as one that dials
 /// does. `None` if another worker has it, which this leaves it to: one already serving the hub, or started at the same
 /// time to serve it.
-#[cfg(unix)]
 pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimError> {
     match claim_instance(state_dir) {
         Err(ClaimError::Taken(_)) => Ok(None),
@@ -88,7 +87,6 @@ mod tests {
     }
 
     /// As one started at the same time as another, to serve the same hub, finds the other has it.
-    #[cfg(unix)]
     #[test]
     fn a_worker_leaves_an_instance_to_another_that_has_it() {
         let dir = tempfile::tempdir().unwrap();

@@ -2,7 +2,7 @@
 //! the whole environment a process a test starts runs in, git for a test's repositories and for the code under test,
 //! the repository a test's hub works in, what a test binary keeps for every process of its build, a `gh` that's logged
 //! in to nothing, a login shell that reads only the test's profile, putting a program where a test runs it, whether a
-//! process is still running, and a test's directory in `/tmp`.
+//! process is still running, and a test's directory in a temporary folder.
 
 mod example;
 mod git;
@@ -13,7 +13,6 @@ mod program;
 mod repository;
 mod running;
 mod test_process;
-#[cfg(unix)]
 mod tmp_dir;
 mod whole_environment;
 mod workspace_build;
@@ -27,7 +26,6 @@ pub use program::{install_program, write_program};
 pub use repository::repository_with_a_commit;
 pub use running::is_running;
 pub use test_process::TestProcess;
-#[cfg(unix)]
 pub use tmp_dir::tmp_dir;
 pub use whole_environment::WholeEnvironment;
 pub use workspace_build::{once_per_run, the_examples, workspace_build};

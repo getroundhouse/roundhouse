@@ -13,9 +13,6 @@ pub struct Config {
     pub github: hub::GithubConfig,
     /// Which relays the endpoint the hub's workers dial uses, which a test's hub turns off.
     pub relays: hub::Relays,
-    /// Whether the local provider's workers dial the hub, which a test's hub can turn off, to reach them on their stdin
-    /// and stdout, as on Windows.
-    pub local_workers_dial: bool,
     /// What a hub, or a worker that can outlive its hub while it has none, stops with, besides being told to stop.
     pub stops_with: StopsWith,
     /// The variables a worker forgets, besides the hub's own, so nothing in a workspace gets them.
@@ -34,7 +31,6 @@ impl Config {
             worker_timers: worker::Timers::DEFAULT,
             github: hub::GithubConfig::github(),
             relays: hub::Relays::N0,
-            local_workers_dial: providers::local::LocalConfig::DIALS,
             stops_with: Box::pin(std::future::pending()),
             also_forgotten: &[],
         }

@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::warn;
 
-use super::{Hub, KEEPS_WORKERS};
+use super::Hub;
 use crate::session::Item;
 use crate::store::Store;
 
@@ -34,12 +34,9 @@ impl Hub {
         clippy::disallowed_methods,
         reason = "the pace a restart looks again whether the setup scripts and requests it waits for have ended"
     )]
-    pub(crate) fn request_restart(self: &Arc<Self>, own: u32) -> Result<(), ApiError> {
-        if !KEEPS_WORKERS {
-            return Err(ApiError::new(ErrorCode::Unsupported, "a restart would stop this hub's agents, so it stops"));
-        }
+    pub(crate) fn request_restart(self: &Arc<Self>, own: u32) {
         if self.restarting.swap(true, Ordering::SeqCst) {
-            return Ok(());
+            return;
         }
         let hub = self.clone();
         tokio::spawn(async move {
@@ -48,7 +45,6 @@ impl Hub {
             }
             hub.request_shutdown();
         });
-        Ok(())
     }
 
     /// Whether the hub is going to restart, which leaves its workers running: it was asked to, and not to stop since.

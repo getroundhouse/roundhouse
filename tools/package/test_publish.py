@@ -146,10 +146,6 @@ class Signature(unittest.TestCase):
 
 
 class Publishing(unittest.TestCase):
-    # Whether this platform's apps step through each break in the worker protocol, since its hubs keep their workers
-    # through an update.
-    APPS_STEP = True
-
     def setUp(self) -> None:
         self.dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.dir)
@@ -334,18 +330,15 @@ class Publishing(unittest.TestCase):
             self.assertFalse((self.bucket / package_name(*gone)).exists(), gone)
         self.assert_packages_match()
 
-    def test_a_release_whose_hub_cant_talk_to_the_newest_one_s_workers_is_refused_where_apps_step(self) -> None:
+    def test_a_release_whose_hub_cant_talk_to_the_newest_one_s_workers_is_refused(self) -> None:
         self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
         work = self.work()
         publish.prepare(self.store, self.key, "0.1.2", work)
         self.pack(work, "0.1.2")
 
-        if self.APPS_STEP:
-            with self.assertRaises(Refused):
-                publish.merge("0.1.2", 10, floors({"oldest": 5, "newest": 6}), work)
-            self.assertEqual(self.published(), [("0.1.1", "Full")])
-        else:
+        with self.assertRaises(Refused):
             publish.merge("0.1.2", 10, floors({"oldest": 5, "newest": 6}), work)
+        self.assertEqual(self.published(), [("0.1.1", "Full")])
 
     def test_what_a_build_says_of_its_floors_is_used_only_as_a_range_and_a_release(self) -> None:
         path = self.dir / "worker-versions.json"
@@ -365,7 +358,7 @@ class Publishing(unittest.TestCase):
             publish.floors(self.dir / "missing.json")
 
     def test_a_release_s_full_package_says_the_oldest_release_it_updates_from_if_it_says_one(self) -> None:
-        # Where apps step, a floor can be no newer than 0.1.1, the last whose hub doesn't speak workers of 5.
+        # A floor can be no newer than 0.1.1, the last whose hub doesn't speak workers of 5.
         self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
         self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
         self.release("0.1.3", speaks={"oldest": 5, "newest": 6}, updates_from="0.1.1")
@@ -398,7 +391,7 @@ class Publishing(unittest.TestCase):
                 publish.merge("0.1.3", 10, floors({"oldest": 4, "newest": 5}, floor), work)
         self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full")])
 
-    def test_where_apps_step_a_floor_newer_than_the_last_release_before_the_oldest_workers_is_refused(self) -> None:
+    def test_a_floor_newer_than_the_last_release_before_the_oldest_workers_is_refused(self) -> None:
         self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
         self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
         work = self.work()
@@ -406,10 +399,7 @@ class Publishing(unittest.TestCase):
         self.pack(work, "0.1.3")
 
         # Only an app whose hub runs workers of 5 takes 0.1.3, and 0.1.1's hub runs none, so it updates from 0.1.1.
-        if self.APPS_STEP:
-            with self.assertRaises(Refused):
-                publish.merge("0.1.3", 10, floors({"oldest": 5, "newest": 6}, "0.1.2"), work)
-        else:
+        with self.assertRaises(Refused):
             publish.merge("0.1.3", 10, floors({"oldest": 5, "newest": 6}, "0.1.2"), work)
         work = self.work()
         publish.prepare(self.store, self.key, "0.1.3", work)
@@ -596,10 +586,10 @@ class Publishing(unittest.TestCase):
         self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
         self.release("0.1.3", speaks={"oldest": 4, "newest": 5})
 
-        # Not the deltas, which start from the release before, where such an app isn't. Where apps step, also 0.1.1,
-        # the newest whose hub speaks workers of protocol 3, for an app with those at work. Each package is this
+        # Not the deltas, which start from the release before, where such an app isn't. Also 0.1.1, the newest whose
+        # hub speaks workers of protocol 3, for an app with those at work. Each package is this
         # channel's, so an app that takes it looks here from then on.
-        offered = [*(self.full("0.1.1") if self.APPS_STEP else []), *self.full("0.1.3")]
+        offered = [*self.full("0.1.1"), *self.full("0.1.3")]
         self.assertEqual(self.offered_on_the_older_channel(), offered)
         self.assertEqual(self.full("0.1.3")[0]["FileName"], package_name("0.1.3", "Full"))
         for entry in offered:
@@ -617,16 +607,15 @@ class Publishing(unittest.TestCase):
         self.assertEqual(self.published(), [("0.1.1", "Full"), ("0.1.3", "Full")])
         self.assertEqual(self.full("0.1.1"), older[:1])
         self.assertEqual(self.offered_on_the_older_channel(),
-                         [*(older[:1] if self.APPS_STEP else []), *self.full("0.1.3")])
+                         [*older[:1], *self.full("0.1.3")])
         self.assert_packages_match()
         for gone in older[1:]:
             self.assertFalse((self.bucket / gone["FileName"]).exists(), gone["FileName"])
         url = self.serve()
         publish.check(url, self.key, "0.1.3", work, wait=0)
-        if self.APPS_STEP:
-            (self.bucket / older[0]["FileName"]).unlink()
-            with self.assertRaisesRegex(Refused, f"{older[0]['FileName']} is missing"):
-                publish.check(url, self.key, "0.1.3", work, wait=0)
+        (self.bucket / older[0]["FileName"]).unlink()
+        with self.assertRaisesRegex(Refused, f"{older[0]['FileName']} is missing"):
+            publish.check(url, self.key, "0.1.3", work, wait=0)
 
     def test_an_older_channel_s_feed_that_isnt_signed_or_offers_more_is_refused_before_anything_goes_up(self) -> None:
         older_feed = self.takes_over()
@@ -755,8 +744,6 @@ class Windows(BesideAnother, Publishing):
     """amd64 Windows' releases, beside macOS's."""
 
     CHANNEL = "win-amd64"
-    # A Windows hub's workers stop with it, so its apps take the newest.
-    APPS_STEP = False
     BESIDE = "macos-arm64"
     PACKAGE = "Roundhouse-0.1.1-win-amd64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-amd64-Setup.exe", "Roundhouse-win-amd64-Portable.zip")
@@ -767,7 +754,6 @@ class WindowsOnArm(BesideAnother, Publishing):
 
     CHANNEL = "win-arm64"
     BESIDE = "win-amd64"
-    APPS_STEP = False
     PACKAGE = "Roundhouse-0.1.1-win-arm64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-arm64-Setup.exe", "Roundhouse-win-arm64-Portable.zip")
 

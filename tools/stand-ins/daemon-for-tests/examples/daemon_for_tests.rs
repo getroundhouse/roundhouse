@@ -12,15 +12,13 @@ fn main() -> anyhow::Result<ExitCode> {
     let build = var(protocol::testing::ENV_TEST_BUILD)
         .and_then(|version| StampedBuild::new(version.leak(), 1))
         .map_or(Build::UNSTAMPED, Build::from);
-    let product = Config::new(build);
     daemon::run(Config {
         hub_timers: hub::Timers::from_env(var),
         worker_timers: worker::Timers::from_env(var),
         github: hub::GithubConfig::from_env(var),
         relays: if var(protocol::testing::ENV_TEST_NO_RELAYS).is_some() { hub::Relays::None } else { hub::Relays::N0 },
-        local_workers_dial: product.local_workers_dial && var(protocol::testing::ENV_TEST_WORKERS_ON_STDIO).is_none(),
         stops_with: Box::pin(TestProcess::until_gone(TestProcess::from_env(var))),
         also_forgotten: &protocol::testing::ENV_TEST,
-        ..product
+        ..Config::new(build)
     })
 }

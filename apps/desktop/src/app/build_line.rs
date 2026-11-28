@@ -88,8 +88,7 @@ pub(super) struct Holding {
 impl Holding {
     /// What holds up an older hub with these chats and this many `terminals` open: nothing an app can count, on one
     /// `restarting`, which keeps its workers, so it stops none of its agents, ends no terminal, and waits only on a
-    /// setup script. Otherwise the agents [`Agents::of`] counts, and every terminal, which restarting it ends, as on
-    /// Windows, whose workers stop with their hub.
+    /// setup script. Otherwise the agents [`Agents::of`] counts, and every terminal, which restarting it ends.
     pub(super) fn of<'a>(
         restarting: bool,
         chats: impl IntoIterator<Item = (SessionStatus, &'a [AgentTask])>,

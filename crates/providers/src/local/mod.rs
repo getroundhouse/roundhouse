@@ -1,7 +1,6 @@
-//! Runs workers on this machine. Each one is a separate process, the daemon's own `worker --ticket`, started in a
-//! session of its own so it outlives its hub, which dials the hub at its endpoint on loopback, as every provider's
-//! worker dials the hub. On Windows, where a worker doesn't dial yet, the hub runs `worker --stdio`, the command
-//! `connect` answers with, and the worker stops with the hub.
+//! Runs workers on this machine. Each one is a separate process, the daemon's own `worker --ticket`, started apart
+//! from the hub so it outlives it, which dials the hub at its endpoint on loopback, as every provider's worker dials
+//! the hub.
 
 #[cfg(test)]
 use crate::{Feature, InstanceState, Provider, ProviderError};

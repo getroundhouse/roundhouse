@@ -17,10 +17,18 @@ pub(crate) fn daemon() -> &'static Path {
     DAEMON.get_or_init(|| example("daemon_for_tests"))
 }
 
-/// What stands in for a worker an earlier build left listening on a socket, which this build starts none of.
+/// What stands in for a worker an earlier build left listening on a socket, which this build starts none of. Only Unix
+/// had one.
+#[cfg(unix)]
 pub(crate) fn earlier_worker() -> &'static Path {
     static EARLIER: OnceLock<PathBuf> = OnceLock::new();
     EARLIER.get_or_init(|| example("earlier_worker"))
+}
+
+/// What stands in for a worker that misbehaves once it has dialed its hub.
+pub(crate) fn misbehaving_worker() -> &'static Path {
+    static MISBEHAVING: OnceLock<PathBuf> = OnceLock::new();
+    MISBEHAVING.get_or_init(|| example("misbehaving_worker"))
 }
 
 /// What [`Stack::make_through_an_adapter`] runs.
@@ -42,7 +50,7 @@ fn example(name: &str) -> PathBuf {
         let output = build.output().unwrap();
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     });
-    bin_dir.join("examples").join(name)
+    bin_dir.join("examples").join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
 }
 
 impl Stack {

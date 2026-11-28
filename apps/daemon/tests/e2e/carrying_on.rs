@@ -67,7 +67,8 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let (go, finished) = (stack.path("go"), stack.path("finished"));
-    let script = format!("say:before; hang-until:{}; say:after; tool:touch {}", go.display(), finished.display());
+    // Quoted, since a path on Windows has backslashes.
+    let script = format!("say:before; hang-until:{}; say:after; tool:touch '{}'", go.display(), finished.display());
     client.session_prompt(&session.id, &script, None).unwrap();
     wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
@@ -235,7 +236,9 @@ fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
 fn a_restart_waits_for_a_setup_script_to_finish() {
     let mut stack = Stack::start();
     let setting_up = Gate::new(&stack, "setting-up");
-    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}; touch ready.txt\"\n", setting_up.shell_wait()));
+    // A literal string, which takes the backslashes of a path on Windows as they are, and on one line, since git there
+    // can check a file out with a carriage return at the end of each.
+    commit_settings(&stack, &format!("[scripts]\nsetup = '''{}; touch ready.txt'''\n", setting_up.shell_wait()));
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
@@ -317,7 +320,8 @@ fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
 
 /// So an update doesn't end the agents of a worker an earlier build left listening on a socket, which doesn't dial: the
 /// first hub whose local workers dial still reaches it through `worker --attach`. This one has no agent, so the hub
-/// ends it once it has reached it, as it would a worker of its own build.
+/// ends it once it has reached it, as it would a worker of its own build. Only Unix had a worker that listened.
+#[cfg(unix)]
 #[test]
 fn a_local_worker_an_earlier_build_left_listening_is_reached_by_the_next_hub() {
     let mut stack = Stack::start();

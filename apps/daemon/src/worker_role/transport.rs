@@ -4,15 +4,13 @@ use crate::runtime::run_to_end;
 use anyhow::Context;
 use std::path::PathBuf;
 
-/// How a worker reaches its hub. Only Unix has one that holds what it dials with.
-#[cfg_attr(not(unix), derive(Clone, Copy))]
+/// How a worker reaches its hub.
 pub(crate) enum Transport {
     /// The worker protocol on stdin and stdout, so the worker stops when its hub goes.
     Stdio,
     /// Connects stdin and stdout to the instance's worker, which an earlier build left listening. Not on Windows.
     Attach,
-    /// Dials the hub with a ticket, and again whenever the connection drops, so it outlives its hub. Not on Windows.
-    #[cfg(unix)]
+    /// Dials the hub with a ticket, and again whenever the connection drops, so it outlives its hub.
     Dial(super::Dial),
 }
 
@@ -31,7 +29,6 @@ pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
     match transport {
         Transport::Stdio => on_stdio(given),
         Transport::Attach => attaching::attach(&given),
-        #[cfg(unix)]
         Transport::Dial(how) => super::dialing::dial(given, how),
     }
 }

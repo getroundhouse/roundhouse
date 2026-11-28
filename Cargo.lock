@@ -3328,6 +3328,7 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
 ]
@@ -7444,6 +7445,16 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "misbehaving-worker"
+version = "0.1.0"
+dependencies = [
+ "dialing",
+ "process",
+ "protocol",
+ "tokio",
 ]
 
 [[package]]

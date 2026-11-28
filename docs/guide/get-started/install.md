@@ -22,11 +22,10 @@ The first time an agent needs you while you're elsewhere, macOS asks whether Rou
 A first preview. Download the installer for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) or [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe) and run it. It installs for you alone, without an administrator, and updates itself from then on.
 
 > [!WARNING]
-> The installer isn't signed, so Windows warns before it runs. The only checks that run on Windows are a lint, and a hub starting and stopping.
+> The installer isn't signed, so Windows warns before it runs. The only checks that run on Windows are a lint, a hub starting and stopping, and a workspace's agent carrying on as the hub restarts.
 
 What differs from the Mac:
 
-- Agents stop when the hub does, so an update waits until nothing is running.
 - No sound plays when an agent needs you.
 - Nothing keeps the computer awake while agents work.
 - There's no dictation.
