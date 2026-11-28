@@ -5,6 +5,8 @@
 
 #![cfg(test)]
 
+use std::time::Duration;
+
 use desktop::workspace_pane::Showing;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
@@ -83,6 +85,31 @@ fn an_image_a_proposal_points_to_in_the_worktree_is_drawn_on_its_page(cx: &mut T
     let image = ui.shown("linked-image/").remove(0);
     let drawn = ui.bounds(image);
     assert_eq!(drawn.size.height, gpui_kit::px(140.), "at the size it says: {drawn:?}");
+}
+
+/// A video the proposal points to in the worktree is kept with it as a drawing is, and plays on its page where it's
+/// pointed to, as one in a reply does, so a choice about motion can be seen moving.
+#[gpui_kit::test]
+fn a_video_a_proposal_points_to_in_the_worktree_plays_on_its_page(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let workspace = ui.new_workspace();
+    std::fs::write(ui.worktree(&workspace).join("demo.webm"), video::fixtures::TWO_SECONDS).unwrap();
+    let propose = PROPOSE.replace("Trains wait a minute.", "Trains wait a minute.\\n\\n![The demo](demo.webm)");
+
+    let open = proposing(&mut ui, &propose);
+    ui.click(open);
+
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    ui.wait("the video's still, from the hub", |ui| !ui.labelled("Play").is_empty());
+    assert!(ui.texts_shown().contains("0:00 / 0:02"), "how long it is, from the file");
+    ui.click_labelled("Play", 0);
+    assert_eq!(ui.labelled("Pause").len(), 1, "playing");
+    // A frame drawn a little later each time, as a display would while it plays.
+    ui.wait("a second in", |ui| {
+        ui.play(Duration::from_millis(120));
+        ui.texts_shown().contains("0:01 / 0:02")
+    });
 }
 
 /// A Mermaid diagram in what the agent proposed is drawn on its page, as in a reply.

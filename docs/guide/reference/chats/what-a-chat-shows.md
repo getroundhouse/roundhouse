@@ -80,7 +80,7 @@ When an agent needs you to decide something too large for a question, such as wh
 - **The proposal opens in the proposal tab,** beside the chats, by itself the first time, without taking you from what you're doing, and from `Open` at the end of its line.
 - **The tab has an outline of the proposal on the left.** Click a part to go to it.
 - **Each option is a card,** with its letter, its title, and `Recommended` on the one the agent recommends.
-- **The images the agent points to show on the page,** such as a diagram or a screenshot in the workspace, as they were when it proposed, and so do the diagrams it writes in Mermaid.
+- **The images and videos the agent points to show on the page,** such as a diagram, a screenshot or a recording in the workspace, as they were when it proposed, and so do the diagrams it writes in Mermaid. A video plays where it is if it's a WebM, as one in a reply does.
 - **The agent can go on working, or stop, while you read it.** Ask it about the options in the chat meanwhile.
 - **A workspace has one proposal tab.** Opening another proposal shows that one in the same tab. `Cmd-W` closes it.
 

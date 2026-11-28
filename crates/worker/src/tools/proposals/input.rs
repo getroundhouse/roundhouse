@@ -141,7 +141,8 @@ pub(super) fn revise_schema() -> Value {
 
 fn written_schema(revising: bool) -> Value {
     let markdown = "Markdown: paragraphs, lists, tables, code blocks, links, diagrams in a code block whose language \
-        is `mermaid`, and images in the worktree, such as `![How it flows](docs/flow.svg)`, by a path relative to it.";
+        is `mermaid`, and images and videos in the worktree, such as `![How it flows](docs/flow.svg)` or \
+        `![The new flow](.context/recordings/flow.webm)`, by a path relative to it.";
     let mut option = json!({
         "type": "object",
         "properties": {
