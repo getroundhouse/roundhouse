@@ -1,0 +1,27 @@
+bm:v1
+fps(60) s(368,229)
+canvases["Foundations/Motion"]
+state(What opens shut) #s1
+state(What opens open) #s2
+state(What opens gone) #s3
+state(What opens shut slow) #s4
+state(What opens open slow) #s5
+state(What opens gone slow) #s6
+#s1 hold(sec(0.6))
+  camera(p(0,0),s(368,229))
+#s1 to(#s2) sec(0.15) ease(out,cubic)
+#s2 hold(sec(1))
+#s2 to(#s3) sec(0.1) ease(out,cubic)
+#s3 hold(sec(0.6))
+#s3 to(#s1) sec(0)
+#s1 hold(sec(0.6))
+#s1 to(#s2) sec(0.15) ease(out,cubic)
+#s2 hold(sec(1))
+#s2 to(#s3) sec(0.1) ease(out,cubic)
+#s3 hold(sec(0.6))
+#s3 to(#s4) sec(0)
+#s4 hold(sec(0.6))
+#s4 to(#s5) sec(0.6) ease(out,cubic)
+#s5 hold(sec(1))
+#s5 to(#s6) sec(0.4) ease(out,cubic)
+#s6 hold(sec(1))

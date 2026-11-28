@@ -83,12 +83,22 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A canvas that uses a token its design system no longer has is drawn with the value stored in the row, and nothing says so. Only a new row that uses it is refused.
 - A change to a component's master reaches a copy on a canvas that another branch added, once they're merged.
 
+## Films
+
+- Brilliant plays no film in the app, by its docs: a film opens as text in its code editor, and only `export` renders one, since the Export panel's video animates only a shader. So the owner watches a film where a reply plays it, and feels motion only once it's built.
+- `export` renders a film to MP4 by its name, such as `motion: "Slide"`, or `Motion/Slide.bm`, and refuses its path from the project's root, such as `Probe/Motion/Slide.bm`. Once it refused a film without `canvasId`, saying it has no canvas of its own, and took it with the path of the canvas the film plays. It writes a sheet of the film's frames, each with its time, and a JSON of how long each frame took to draw beside the video, in which a frame where something moved has `changed` above 0. `ffmpeg -c:v libvpx-vp9 -pix_fmt yuv420p` makes a WebM of it, which a reply plays.
+- A film is as big as its first state's frame, times `export`'s `scale`, whatever its own `s()` says, so `scale: 2` draws it sharp.
+- `camera(p(x,y),s(w,h))` crops to a region of its state's frame, from the frame's top left rather than the canvas's, and draws it as big as the film. So one set of frames can make a film of all of them and a film of each part.
+- An element in only one of a window's two states fades in over the window, and so does each element inside it, which `enter(sec(0))` on the element alone doesn't change. One that's there at once takes `enter(sec(0))`, and what's inside it `all(in(#ref)) enter(sec(0))`.
+- A frame's opacity multiplies into what's inside it, in a film as on the canvas, as GPUI's does, so what fades has it on its frame alone. Set on what's inside it too, it multiplies again: words in a menu three frames deep fading on ease-out cubic were at a fifth of the way a quarter of the way through, the curve cubed, and at three fifths with the fade on the menu alone.
+- A frame doesn't clip what's in it unless its row says `clip`.
+- `scaleTo` leaves a text it scales bound to parts of its kind of text, as `SF Pro Text:$typography.Body.fontFamily`, which `tools/policy`'s design test refuses as a token the design system doesn't have. Setting the text again with its values bare, as `t("New chat",SF Pro Text,12.6,r,align(l),lh(1.6071),ls(-0.1348px))`, sent in `none`, keeps it as it looks.
+- A canvas and the `Motion/` folder of films beside it can share a name, such as `Probe/Motion.bl` and `Probe/Motion/`, made and deleted to try it.
+
 ## Moving a canvas
 
 - A canvas moved or renamed in Brilliant, with `move_canvas` or `rename_canvas`, which takes `canvasId` and `newName`, the name without its folder, has every copy of its components on every canvas pointed at its new path, as `inst("Status Ready for review",canvas(Board/Status))`, in the files on disk. The moved file is otherwise unchanged. Some copies were written with their master's layout and fill beside them, as a copy on a canvas edited since its master changed is.
 - A master renamed with `edit` had every copy's row renamed with it, in each file, in a project open in the app. In a project open only in the background, the copies kept the old name until their rows were renamed by hand, after which they drew the new master. A copy's body stored beside its row kept the old words, and didn't show them.
-- `export` renders a film to MP4 by its name, such as `motion: "Slide"`, or `Motion/Slide.bm`, and refuses its path from the project's root, such as `Probe/Motion/Slide.bm`. It writes a sheet of the film's frames, each with its time, and a JSON of its timing beside the video. `ffmpeg -c:v libvpx-vp9 -pix_fmt yuv420p` makes a WebM of it, which a reply plays.
-- A canvas and the `Motion/` folder of films beside it can share a name, such as `Probe/Motion.bl` and `Probe/Motion/`, made and deleted to try it.
 - A film isn't pointed at a canvas that moved: its `canvases[…]` keeps the old path.
 - A copy that names a path no canvas has draws nothing, and nothing says so, though its row names its master's ID. `read` shows the row as it is, with no warning. A canvas added on a branch cut before a move is one once they're merged: in a project opened afresh, its copy naming the old path drew nothing, and the same copy naming the new path drew. A film that names a path no canvas has is refused, with the path it named.
 - Until the app quits, what names a path a canvas was moved from in Brilliant can still find it, so a check of a move is made in a project opened afresh.
