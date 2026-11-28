@@ -1,5 +1,5 @@
 use super::super::Hub;
-use super::disconnected::Cause;
+use super::disconnected_workspaces::Cause;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;

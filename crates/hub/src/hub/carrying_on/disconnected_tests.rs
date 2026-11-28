@@ -8,7 +8,7 @@ use protocol::client::ErrorCode;
 use providers::WorkerLiveness;
 use tokio::time::Instant;
 
-use super::disconnected::Cause;
+use super::disconnected_workspaces::Cause;
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::{a_chat, hub_with_stand_in_workers};
 use crate::worker_link::dial_unless_gone;
