@@ -25,7 +25,9 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Retrying { run, retrying } => session.retrying(run, retrying),
             Item::Report { run, report, .. } => session.take_report(run, report).await,
-            Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
+            Item::AgentLost { link, reason } => {
+                session.agent_lost(link, reason).await;
+            }
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {
                 let _ = done.send(());
@@ -244,7 +246,8 @@ impl LiveSession {
     }
 
     /// Reports that the agent is gone, unless a newer one has already replaced it.
-    pub(crate) async fn agent_lost(&self, link: WorkerLinkId, reason: ExitReason) {
+    /// Whether it was, so the caller knows what it recorded.
+    pub(crate) async fn agent_lost(&self, link: WorkerLinkId, reason: ExitReason) -> bool {
         let lost = {
             let mut state = self.state.lock();
             let lost = state.agent.filter(|agent| agent.link == link);
@@ -263,6 +266,7 @@ impl LiveSession {
             let body = EventBody::AgentExited { reason, code: None, signal: None, stderr_tail: vec![] };
             self.record_or_log(Origin::Run { run: lost.run, current: true, numbered: None }, body).await;
         }
+        lost.is_some()
     }
 
     /// Interrupts the session, whose agent isn't on its workspace's worker, which the hub has reached again, whether an

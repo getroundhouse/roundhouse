@@ -31,7 +31,7 @@ async fn a_provider_is_asked_less_often_the_longer_a_worker_has_been_disconnecte
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false, None);
     asked.say_workers_are(WorkerLiveness::Running);
 
     looking_for(&hub, &workspace, Duration::from_hours(1)).await;
@@ -46,7 +46,7 @@ async fn a_provider_that_cant_say_is_asked_once_however_often_the_wait_looks() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false, None);
 
     looking_for(&hub, &workspace, Duration::from_mins(10)).await;
 
@@ -61,7 +61,7 @@ async fn a_request_for_a_worker_waits_for_its_provider_to_say_whether_it_is_gone
     let (hub, _) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
     hub.workers.lock().remove(&workspace.id);
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false, None);
     let asking = tokio::spawn({
         let (hub, id) = (hub.clone(), workspace.id.clone());
         async move { hub.ensure_worker(&id).await.map(drop) }
@@ -86,7 +86,7 @@ async fn a_request_for_a_worker_that_isnt_said_to_be_gone_is_refused_once_that_i
     let (hub, _) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
     hub.workers.lock().remove(&workspace.id);
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, false, None);
     let ask = || {
         let (hub, id) = (hub.clone(), workspace.id.clone());
         tokio::spawn(async move { hub.ensure_worker(&id).await.map(drop) })
@@ -118,7 +118,7 @@ async fn a_request_waiting_for_its_turn_as_the_connection_drops_is_refused_when_
     });
     waiting::task::for_what_mustnt_happen(Duration::from_secs(1)).await;
 
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true, None);
     drop(held);
 
     let refused = asking.await.unwrap().unwrap_err();

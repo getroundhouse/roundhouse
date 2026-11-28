@@ -168,7 +168,7 @@ impl Hub {
             // Its provider was asked as the hub waited, and didn't say it's gone, so nothing waits for that to be known.
             match self.workspace(&workspace_id).await {
                 Ok(workspace) => {
-                    self.disconnected.mark(&workspace_id, &workspace.instance_id, Cause::LeftByEarlierHub, true);
+                    self.disconnected.mark(&workspace_id, &workspace.instance_id, Cause::LeftByEarlierHub, true, None);
                     let span = spans::workspace(&workspace_id);
                     tokio::spawn(self.clone().wait_for_worker(workspace_id).instrument(span));
                 }
@@ -204,9 +204,14 @@ impl Hub {
                     error = e.message,
                     "The worker couldn't be reached, so its sessions are interrupted"
                 );
+                // Each chat whose agent was on a connection that dropped is told it's lost, as it is when a worker's
+                // found gone as the hub runs, and one that's recorded it is interrupted no more.
+                let told = self.tell_agents_lost(workspace_id).await;
                 for id in at_work {
                     let prompts = take(&id);
-                    self.interrupt_session(id, prompts).await;
+                    if !told.contains(&id) {
+                        self.interrupt_session(id, prompts).await;
+                    }
                 }
                 return Carried::Done;
             }

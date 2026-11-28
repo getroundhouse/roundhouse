@@ -20,7 +20,7 @@ async fn a_prompt_sent_while_the_worker_is_disconnected_is_recorded_and_given_to
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true, None);
 
     let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("while you were away"), None).await.unwrap();
     waiting::task::for_what_mustnt_happen(Duration::from_millis(300)).await;
@@ -48,10 +48,35 @@ async fn a_hub_that_cant_reach_a_workspaces_worker_isnt_idle() {
     let (workspace, _) = a_chat(&hub).await;
     // Its setup, which a new workspace has, has to end first.
     waiting::task::until(TIMEOUT, "the hub to be idle", || hub.status().is_idle()).await;
-    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true, None);
 
     let refused = hub.shutdown_if_idle();
 
     assert!(hub.status().is_idle(), "nothing else is at work");
     assert_eq!(refused.unwrap_err().code, protocol::client::ErrorCode::Conflict);
+}
+
+/// So a chat whose agent was on a connection that dropped records its loss once the worker is found gone, though it's
+/// idle, and once only.
+#[tokio::test]
+async fn a_chat_with_an_idle_agent_on_a_dropped_connection_records_its_loss_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_with_stand_in_workers(dir.path());
+    let (workspace, chat) = a_chat(&hub).await;
+    crate::hub::stand_in_workers::a_turn(&hub, &asked, &chat.id, Prompt::new("look into it"), None).await;
+    let link = hub.workers.lock().get(&workspace.id).cloned().unwrap();
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true, Some(link.id));
+    let lost = |hub: &Hub| {
+        log(hub, &chat.id)
+            .iter()
+            .filter(|e| {
+                matches!(e.body, EventBody::AgentExited { reason: protocol::event::ExitReason::WorkerLost, .. })
+            })
+            .count()
+    };
+
+    let told = hub.tell_agents_lost(&workspace.id).await;
+    let told_again = hub.tell_agents_lost(&workspace.id).await;
+
+    assert_eq!((told.len(), told_again.len(), lost(&hub)), (1, 0, 1));
 }

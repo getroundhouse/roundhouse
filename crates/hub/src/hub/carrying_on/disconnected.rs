@@ -6,12 +6,12 @@ use super::super::observations::Keeper;
 use super::LeftAtWork;
 use super::recovery::{Carried, interrupt};
 use crate::spans;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{WorkerLink, WorkerLinkId};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::ExitReason;
 use protocol::model::{InstanceId, Seq, SessionId, WorkspaceId, WorkspaceStatus};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -65,6 +65,9 @@ struct Entry {
     cant_say: bool,
     /// Its worker's connection ended again while it was being carried on with, so the wait isn't over.
     dropped_again: bool,
+    /// The links whose connections dropped, which the agents of its sessions were on, so each is told they're lost if
+    /// the worker is found gone.
+    links: Vec<WorkerLinkId>,
 }
 
 /// The workspaces whose worker the hub can't reach, which it waits for, and since when. A worker's connection is how it
@@ -83,7 +86,14 @@ pub(crate) struct Disconnected {
 impl Disconnected {
     /// Says the workspace's worker can't be reached, from now, unless it already was. `settled` is whether its provider
     /// has been asked already, and didn't say it's gone. Whether it newly is.
-    pub(crate) fn mark(&self, id: &WorkspaceId, instance_id: &InstanceId, cause: Cause, settled: bool) -> bool {
+    pub(crate) fn mark(
+        &self,
+        id: &WorkspaceId,
+        instance_id: &InstanceId,
+        cause: Cause,
+        settled: bool,
+        dropped: Option<WorkerLinkId>,
+    ) -> bool {
         let mut entries = self.entries.lock();
         if entries.contains_key(id) {
             return false;
@@ -97,6 +107,7 @@ impl Disconnected {
             asked: None,
             cant_say: false,
             dropped_again: false,
+            links: dropped.into_iter().collect(),
         };
         entries.insert(id.clone(), entry);
         true
@@ -111,9 +122,10 @@ impl Disconnected {
 
     /// Says its worker's connection ended again while it was being carried on with, so the workspace isn't connected
     /// when that's done.
-    pub(crate) fn dropped_again(&self, id: &WorkspaceId) {
+    pub(crate) fn dropped_again(&self, id: &WorkspaceId, link: WorkerLinkId) {
         if let Some(entry) = self.entries.lock().get_mut(id) {
             entry.dropped_again = true;
+            entry.links.push(link);
         }
     }
 
@@ -133,6 +145,11 @@ impl Disconnected {
         entries.remove(id);
         self.changed.notify_waiters();
         true
+    }
+
+    /// The links of the workspace's whose connections dropped.
+    pub(crate) fn dropped_links(&self, id: &WorkspaceId) -> Vec<WorkerLinkId> {
+        self.entries.lock().get(id).map_or_else(Vec::new, |entry| entry.links.clone())
     }
 
     pub(crate) fn clear(&self, id: &WorkspaceId) {
@@ -261,9 +278,9 @@ impl Hub {
             return None;
         }
         // Before it leaves the map, so a worker wanted meanwhile isn't started on the instance.
-        let newly = self.disconnected.mark(workspace_id, instance_id, Cause::ConnectionDropped, false);
+        let newly = self.disconnected.mark(workspace_id, instance_id, Cause::ConnectionDropped, false, Some(link.id));
         if !newly {
-            self.disconnected.dropped_again(workspace_id);
+            self.disconnected.dropped_again(workspace_id, link.id);
         }
         Some(newly)
     }
@@ -342,6 +359,29 @@ impl Hub {
     /// agent.
     pub(crate) async fn wait_until_connected(&self, workspace_id: &WorkspaceId) {
         self.disconnected.until_connected(workspace_id).await;
+    }
+
+    /// Tells each live session of the workspace whose agent was on a connection that dropped that it's lost, as it's told
+    /// when a worker is found gone as the hub runs. Which sessions did record it, so none is interrupted a second time.
+    pub(in super::super) async fn tell_agents_lost(&self, workspace_id: &WorkspaceId) -> HashSet<SessionId> {
+        let links = self.disconnected.dropped_links(workspace_id);
+        let sessions: Vec<_> = self
+            .sessions
+            .lock()
+            .live
+            .values()
+            .filter(|session| session.workspace_id == *workspace_id)
+            .cloned()
+            .collect();
+        let mut told = HashSet::new();
+        for session in sessions {
+            for link in &links {
+                if session.agent_lost(*link, ExitReason::WorkerLost).await {
+                    told.insert(session.id.clone());
+                }
+            }
+        }
+        told
     }
 
     /// Interrupts the session `id`, whose agent isn't on the worker, with `untaken` the prompts its agent hadn't taken.

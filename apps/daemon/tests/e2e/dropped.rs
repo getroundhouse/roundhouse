@@ -47,6 +47,44 @@ fn a_worker_killed_while_the_hub_runs_is_found_gone_and_the_next_prompt_gets_a_n
     assert!(assistant_text(&events).ends_with("back"));
 }
 
+/// So a chat is told its agent has gone as soon as its worker is found gone, as it was when a lost connection meant a lost
+/// worker, and not only when its next prompt finds out. Here the agent is idle, its turn over, so nothing but telling
+/// every chat of the workspace does.
+#[test]
+fn a_chat_with_an_idle_agent_records_its_loss_when_the_worker_is_found_gone() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:first", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    Stack::kill_worker(stack.worker_pid());
+
+    wait_until("the chat to record the loss of its agent", || lost_agents(&read_all(&client, &session.id)) == 1);
+}
+
+/// The agent is killed with its worker as it starts, before it has answered the prompt, so the prompt is dropped before
+/// its exit, and the chat isn't at work. Its agent's exit is recorded all the same.
+#[test]
+fn a_chat_whose_agent_is_lost_as_it_starts_still_records_the_loss() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:first; hang", None).unwrap();
+    wait_until("the agent to start", || started_pid(&read_all(&client, &session.id)).is_some());
+
+    Stack::kill_worker(stack.worker_pid());
+
+    wait_until("the chat to record the loss of its agent", || lost_agents(&read_all(&client, &session.id)) == 1);
+}
+
+fn lost_agents(events: &[protocol::event::SessionEvent]) -> usize {
+    let lost = |e: &&protocol::event::SessionEvent| {
+        matches!(e.body, EventBody::AgentExited { reason: ExitReason::WorkerLost, .. })
+    };
+    events.iter().filter(lost).count()
+}
+
 /// The worker's own timer says its connection has dropped before the hub's does: the hub is stalled, so it says
 /// nothing for longer than the 3 s a worker in a test waits, and the worker dials again. Neither stops, so the agent's
 /// turn goes on over the new connection, with nothing recorded twice or lost. Where the hub can be stopped by a signal.
