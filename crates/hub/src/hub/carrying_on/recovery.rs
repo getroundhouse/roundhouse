@@ -36,6 +36,16 @@ impl LeftAtWork {
     }
 }
 
+/// What became of the worker an earlier hub left in a workspace.
+#[derive(PartialEq, Eq)]
+pub(super) enum Carried {
+    /// Its sessions were carried on with its agents, or interrupted if it couldn't be reached or has gone.
+    Done,
+    /// It hasn't dialed this hub, and nothing says it's gone, so its workspace is disconnected: nothing was ended or
+    /// interrupted.
+    NotDialed,
+}
+
 /// The prompts each session's agent hadn't taken, which a session takes as it carries on or is interrupted.
 type Untaken = Arc<Mutex<HashMap<SessionId, Vec<Seq>>>>;
 
@@ -44,6 +54,7 @@ impl Hub {
     /// it has one. Each workspace's worker is reached on its own, so a slow one holds up only its own sessions.
     pub(crate) async fn carry_on(self: &Arc<Self>, left: LeftAtWork) {
         let LeftAtWork { mut sessions, workspaces, untaken } = left;
+        let at_work_by_workspace = sessions.clone();
         // First, so a worker an earlier hub left, which dials again, is admitted.
         self.listen_for_workers().await;
         let untaken: Untaken = Arc::new(Mutex::new(untaken));
@@ -68,13 +79,25 @@ impl Hub {
         }
         carrying.join_all().await;
         // Every agent still running has been carried on with, so whatever the rest claimed, and what was only true of
-        // them, such as the tool servers they had, are gone with them.
+        // them, such as the tool servers they had, are gone with them. The agents of a workspace whose worker hasn't
+        // dialed the hub may still be running, so their sessions are left as the earlier hub had them, until the worker
+        // does.
         self.unkept_observations_gone().await;
-        let running: Vec<SessionId> = self.sessions.lock().live.keys().cloned().collect();
+        let waiting_for: Vec<SessionId> = {
+            let disconnected = self.disconnected.lock();
+            at_work_by_workspace
+                .iter()
+                .filter(|(id, _)| disconnected.contains(*id))
+                .flat_map(|(_, ids)| ids)
+                .cloned()
+                .collect()
+        };
+        let running: Vec<SessionId> =
+            self.sessions.lock().live.keys().cloned().chain(waiting_for.iter().cloned()).collect();
         self.write(move |store| store.clear_claims_but(&running)).await;
         // A session that wasn't at work, and whose agent isn't running, never will take these.
         let untaken = std::mem::take(&mut *untaken.lock());
-        for (id, prompts) in untaken {
+        for (id, prompts) in untaken.into_iter().filter(|(id, _)| !waiting_for.contains(id)) {
             self.write(move |store| drop_untaken(store, &id, prompts)).await;
         }
     }
@@ -126,7 +149,9 @@ impl Hub {
         running
     }
 
-    /// `being_moved` is whether the earlier hub was archiving or restoring the workspace.
+    /// `being_moved` is whether the earlier hub was archiving or restoring the workspace. A worker that hasn't dialed
+    /// the hub within [`Timers::before_serving`](crate::Timers::before_serving), and that its provider doesn't say is
+    /// gone, leaves the workspace disconnected, as [`Hub::wait_for_worker`] says, and the hub serves meanwhile.
     pub(super) async fn carry_on_in(
         self: Arc<Self>,
         workspace_id: WorkspaceId,
@@ -134,9 +159,30 @@ impl Hub {
         being_moved: bool,
         untaken: Untaken,
     ) {
+        if self.carry_on_workspace(&workspace_id, at_work, being_moved, untaken).await == Carried::NotDialed {
+            info!(
+                name: "recovery.worker_disconnected",
+                %workspace_id,
+                "The worker an earlier hub left hasn't dialed this one, so it's waited for"
+            );
+            self.disconnected.lock().insert(workspace_id.clone());
+            let span = spans::workspace(&workspace_id);
+            tokio::spawn(self.clone().wait_for_worker(workspace_id).instrument(span));
+        }
+    }
+
+    /// What's left at work in the workspace, carried on with or recovered, or left for its worker to dial.
+    pub(super) async fn carry_on_workspace(
+        self: &Arc<Self>,
+        workspace_id: &WorkspaceId,
+        at_work: Vec<SessionId>,
+        being_moved: bool,
+        untaken: Untaken,
+    ) -> Carried {
         let take = |id: &SessionId| untaken.lock().remove(id).unwrap_or_default();
-        let (link, running) = match self.worker_left_running(&workspace_id).await {
+        let (link, running) = match self.worker_left_running(workspace_id).await {
             Ok(reached) => reached,
+            Err(e) if e.code == ErrorCode::Unavailable => return Carried::NotDialed,
             Err(e) => {
                 warn!(
                     name: "recovery.worker_unreached",
@@ -146,9 +192,9 @@ impl Hub {
                 );
                 for id in at_work {
                     let prompts = take(&id);
-                    self.write(move |store| interrupt(store, &id, prompts)).await;
+                    self.interrupt_session(id, prompts).await;
                 }
-                return;
+                return Carried::Done;
             }
         };
         // A session whose agent has gone since the earlier hub did, but said so to its worker, carries on with it too,
@@ -164,8 +210,7 @@ impl Hub {
                 let claims = running_agent.map(RunningAgent::claims);
                 self.carry_on_session(id, link.id, run, take(id), claims).await;
             } else {
-                let (id, prompts) = (id.clone(), take(id));
-                self.write(move |store| interrupt(store, &id, prompts)).await;
+                self.interrupt_session(id.clone(), take(id)).await;
             }
         }
         // An agent idle as the earlier hub went is still running too.
@@ -173,8 +218,8 @@ impl Hub {
             let claims = Some(agent.claims());
             self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id), claims).await;
         }
-        link.release(&self).await;
-        let terminals = self.carry_on_terminals(&workspace_id, &link).await;
+        link.release(self).await;
+        let terminals = self.carry_on_terminals(workspace_id, &link).await;
         // After what its worker said, so an agent that said it exited isn't said to have gone twice.
         for id in gone {
             self.route(&id, Item::AgentLost { link: link.id, reason: ExitReason::HubRestart }).await;
@@ -188,7 +233,8 @@ impl Hub {
             build,
             "Connected again to the worker an earlier hub left"
         );
-        self.keep_or_end(workspace_id, link, terminals > 0, being_moved).await;
+        self.clone().keep_or_end(workspace_id.clone(), link, terminals > 0, being_moved).await;
+        Carried::Done
     }
 
     /// Keeps `link`, to the worker an earlier hub left, while its workspace has a session, or it has a terminal, as
@@ -251,7 +297,11 @@ impl Hub {
             .await;
         let started = read.and_then(|(starting, recorded)| {
             let carried = CarriedOver { link, run, recorded, untaken };
-            self.sessions.lock().keep(id, || LiveSession::start(self, starting, Some(carried)))
+            let capabilities = starting.stored.session.agent_capabilities.clone();
+            let live = self.sessions.lock().keep(id, || LiveSession::start(self, starting, Some(carried.clone())))?;
+            // One a client followed before its worker dialed was made with no agent, and takes this one now.
+            live.carry_on_with(carried, capabilities);
+            Ok(live)
         });
         match started {
             // What it said that's only its own is kept, as the earlier hub kept it.

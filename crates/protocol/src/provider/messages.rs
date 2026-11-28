@@ -20,8 +20,10 @@ pub const HELLO_ANSWERED_WITHIN: Duration = Duration::from_secs(10);
 /// should take, even a cloud's VM starting, so an adapter that has lost a request can't keep the hub waiting forever.
 pub const ANSWERED_WITHIN: Duration = Duration::from_mins(10);
 /// How long a hub that's starting gives an adapter, before it serves, to answer `list`, its start and its hello
-/// included, and a worker an earlier hub left there to dial it again. The hub interrupts the sessions of a slower one,
-/// as if their workers had gone, so one slow provider doesn't keep every client waiting.
+/// included, and gives a worker an earlier hub left there to dial it again. The hub interrupts the sessions of an
+/// adapter that's slower to answer, as if their workers had gone, so one slow provider doesn't keep every client
+/// waiting. A worker that hasn't dialed by then isn't ended, unless the adapter says it's gone: its workspace waits for
+/// it.
 pub const ANSWERED_AS_THE_HUB_STARTS_WITHIN: Duration = Duration::from_secs(5);
 
 /// A request to a provider's adapter, which names what the adapter answers it with.

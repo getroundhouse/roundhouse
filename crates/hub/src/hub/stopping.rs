@@ -93,6 +93,7 @@ impl Hub {
             }
         }
         stuck.join_all().await;
+        self.end_disconnected_workers().await;
         // So the next hub doesn't wait for them to dial it.
         if let Err(e) = self.blocking(Store::forget_dialing_workers).await {
             warn!(name: "dialed.unforgotten", error = e.message, "Couldn't forget the workers that dialed the hub");

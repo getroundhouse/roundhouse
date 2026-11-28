@@ -24,9 +24,12 @@ pub struct Timers {
     /// How long a provider's adapter has to answer the hub's hello, which is the provider protocol's
     /// `HELLO_ANSWERED_WITHIN`.
     pub adapter_hello_within: Duration,
-    /// How long the hub waits as it starts, before it serves, for a provider to list its instances, or for a worker an
-    /// earlier hub left running to dial it again, or the local provider to say how to reach one. One that takes longer has its sessions interrupted, as if their
-    /// workers had gone, so a slow one doesn't keep every client waiting. For an adapter, it's the provider protocol's
+    /// How long the hub waits as it starts, before it serves, for a provider to list its instances, or the local
+    /// provider to say how to reach a worker, and how long it gives a worker an earlier hub left to dial it before it
+    /// serves. A provider that takes longer to list has its sessions interrupted, as if their workers had gone, so a
+    /// slow one doesn't keep every client waiting. A worker that hasn't dialed by then, and that its provider doesn't say
+    /// is gone, isn't ended: its workspace is disconnected, and carried on with when the worker dials, so this is how
+    /// long clients wait for it, not how long it has. For an adapter, it's the provider protocol's
     /// `ANSWERED_AS_THE_HUB_STARTS_WITHIN`.
     pub before_serving: Duration,
     /// How often the hub looks at a workspace whose worker is another build.
