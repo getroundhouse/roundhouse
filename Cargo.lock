@@ -7456,6 +7456,7 @@ dependencies = [
  "process",
  "protocol",
  "tokio",
+ "worker",
 ]
 
 [[package]]

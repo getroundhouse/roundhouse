@@ -381,7 +381,13 @@ fn a_local_worker_an_earlier_build_left_listening_is_reached_by_the_next_hub() {
     let logged_before = std::fs::metadata(stack.hub_log()).unwrap().len();
 
     crate::attaching::start_listening(crate::support::daemon(), &stack.path("workspaces"), &instance);
-    let listening = process::ProcessRecord::read(&record).unwrap();
+    // Looked at until it reads, since a record is rewritten in place, and one read as it is has nothing in it yet.
+    let mut recorded = None;
+    wait_until("the worker's record to read", || {
+        recorded = process::ProcessRecord::read(&record);
+        recorded.is_some()
+    });
+    let listening = recorded.unwrap();
     stack.start_hub();
 
     let logged = || {

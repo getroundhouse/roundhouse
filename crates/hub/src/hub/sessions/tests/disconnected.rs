@@ -46,6 +46,8 @@ async fn a_hub_that_cant_reach_a_workspaces_worker_isnt_idle() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, _) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
+    // Its setup, which a new workspace has, has to end first.
+    waiting::task::until(TIMEOUT, "the hub to be idle", || hub.status().is_idle()).await;
     hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
 
     let refused = hub.shutdown_if_idle();

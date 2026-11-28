@@ -95,6 +95,17 @@ impl Stack {
         running[0]
     }
 
+    /// What each instance's worker wrote to its log, the end of it, for a test that failed, since a worker that never
+    /// dialed, or exited, says why only there.
+    fn print_worker_logs(&self) {
+        const KEPT: usize = 2000;
+        for log in std::fs::read_dir(self.paths().worker_logs_dir).into_iter().flatten().flatten() {
+            let written = std::fs::read(log.path()).unwrap_or_default();
+            let end = String::from_utf8_lossy(&written[written.len().saturating_sub(KEPT)..]).into_owned();
+            eprintln!("what the worker of instance {} logged, at the end:\n{end}", log.file_name().to_string_lossy());
+        }
+    }
+
     /// Kills the worker `pid` and what it started, with no warning, as a crash does, on any OS.
     pub(crate) fn kill_worker(pid: u32) {
         process::signal_group(pid, process::Signal::Kill);
@@ -152,6 +163,7 @@ impl Drop for Stack {
         if std::thread::panicking() {
             let logged = std::fs::read(self.hub_log()).unwrap_or_default();
             eprintln!("what the stack's hubs logged:\n{}", String::from_utf8_lossy(&logged));
+            self.print_worker_logs();
         }
         self.stop_hub();
         // A hub that was killed left its workers running for the next hub, and there's no next one.

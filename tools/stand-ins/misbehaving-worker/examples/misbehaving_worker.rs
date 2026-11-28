@@ -21,7 +21,6 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use dialing::{WorkerEndpoint, read_frame, write_frame};
-use process::ProcessRecord;
 use process::testing::TestProcess;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::dialing::WorkerTicket;
@@ -42,10 +41,8 @@ fn main() {
     }
     let state_dir = PathBuf::from(after(&args, "--state-dir"));
     std::fs::create_dir_all(&state_dir).unwrap();
-    ProcessRecord::write(&state_dir.join(protocol::paths::WORKER_RECORD_FILE), std::process::id()).unwrap();
-    // As a worker holds its instance, which its provider says it's running by, until it's gone.
-    let claim = std::fs::File::create(state_dir.join(protocol::paths::WORKER_LOCK_FILE)).unwrap();
-    claim.try_lock().unwrap();
+    // As a worker claims its instance, with the worker's own code, which also records it as the worker serving it.
+    let claim = worker::claim_instance(&state_dir).unwrap();
     let misbehaves = std::env::var(MISBEHAVES).unwrap();
     let test = TestProcess::from_env(|name| std::env::var(name).ok());
     tokio::runtime::Runtime::new().unwrap().block_on(async move {
@@ -64,11 +61,19 @@ fn start_apart(args: &[OsString], ticket: &str) {
         .args(args.iter().filter(|arg| *arg != "--detach"))
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(log_of(args));
     process::detach(&mut command);
     #[expect(clippy::zombie_processes, reason = "never waited on, since the point is that it outlives this process")]
     let mut started = command.spawn().unwrap();
     started.stdin.take().unwrap().write_all(ticket.as_bytes()).unwrap();
+}
+
+/// Where a worker's stderr goes, which is the log it's given, so what stops this one, such as a claim it can't take, is
+/// there for a test that fails to say.
+fn log_of(args: &[OsString]) -> Stdio {
+    let Some(at) = args.iter().position(|arg| arg == "--log") else { return Stdio::null() };
+    let log = std::fs::OpenOptions::new().create(true).append(true).open(&args[at + 1]).unwrap();
+    Stdio::from(log)
 }
 
 /// The argument after `flag`.

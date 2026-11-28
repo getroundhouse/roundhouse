@@ -24,7 +24,8 @@ fn a_worker_killed_while_the_hub_runs_is_found_gone_and_the_next_prompt_gets_a_n
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first; hang", None).unwrap();
-    wait_until("the agent to start", || started_pid(&read_all(&client, &session.id)).is_some());
+    // Said, so the agent has taken the prompt, which a worker killed before it had would leave sent and not answered.
+    wait_until("the agent to take the prompt", || assistant_text(&read_all(&client, &session.id)) == "first");
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
 
     Stack::kill_worker(stack.worker_pid());
