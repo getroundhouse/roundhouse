@@ -145,6 +145,7 @@ fn provider_dialing(dir: &Path, worker_exe: PathBuf, dials: bool) -> LocalProvid
         worker_logs_dir: dir.join("worker-logs"),
         environment: process::Environment::NONE.with("GIVEN", "the machine's"),
         dials,
+        hub_address_file: Some(dir.join("loopback-worker-address.json")),
     })
 }
 
@@ -232,6 +233,8 @@ async fn a_worker_that_dials_is_given_its_ticket_on_stdin_and_not_in_its_argumen
     assert!(!args.iter().any(|arg| arg.contains("the-secret-ticket")), "{args:?}");
     let after = |flag: &str| args.iter().position(|arg| *arg == flag).map(|at| args[at + 1]);
     assert_eq!(after("--ticket"), Some("-"), "{args:?}");
+    let address_file = dir.path().join("loopback-worker-address.json");
+    assert_eq!(after("--hub-address-file"), Some(address_file.to_str().unwrap()), "so it finds a hub that moved");
     assert!(args.contains(&"--detach"), "so it outlives the hub: {args:?}");
     let log = dir.path().join("worker-logs/i.log");
     assert_eq!(after("--log"), Some(log.to_str().unwrap()));

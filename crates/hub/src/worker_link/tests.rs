@@ -35,6 +35,7 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
         worker_logs_dir: dir.join("worker-logs"),
         environment: process::Environment::NONE,
         dials: false,
+        hub_address_file: None,
     }))
 }
 

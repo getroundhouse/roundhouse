@@ -18,12 +18,17 @@ pub const ENV_TEST_BUILD: &str = "ROUNDHOUSE_TEST_BUILD";
 /// test off the internet.
 pub const ENV_TEST_NO_RELAYS: &str = "ROUNDHOUSE_TEST_NO_RELAYS";
 
+/// The first of the ports a test's hub's endpoints bind, as `hub::EndpointPorts::for_a_test` says, which its run gives
+/// no other hub.
+pub const ENV_TEST_ENDPOINT_PORTS: &str = "ROUNDHOUSE_TEST_ENDPOINT_PORTS";
+
 /// Each of them, none of which anything in a workspace gets.
-pub const ENV_TEST: [&str; 6] = [
+pub const ENV_TEST: [&str; 7] = [
     ENV_TEST_HUB_TIMERS,
     ENV_TEST_WORKER_TIMERS,
     ENV_TEST_GITHUB_API,
     ENV_TEST_PROCESS,
     ENV_TEST_BUILD,
     ENV_TEST_NO_RELAYS,
+    ENV_TEST_ENDPOINT_PORTS,
 ];

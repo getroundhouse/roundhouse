@@ -14,7 +14,7 @@ const WITHIN: Duration = Duration::from_secs(10);
 
 async fn listening(dir: &std::path::Path) -> WorkerDial {
     let store = Arc::new(store_with_session(dir));
-    let dial = WorkerDial::new(dir, Relays::None, store);
+    let dial = WorkerDial::new(dir, Relays::None, EndpointPorts::PRODUCT, store);
     dial.listen(Endpoint::Loopback).await.unwrap();
     dial
 }
@@ -90,7 +90,7 @@ async fn an_instance_the_hub_has_no_record_of_gets_no_ticket() {
 async fn a_hub_knows_which_providers_workers_dial_it_from_its_instances_records() {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(store_with_session(dir.path()));
-    let dial = WorkerDial::new(dir.path(), Relays::None, store.clone());
+    let dial = WorkerDial::new(dir.path(), Relays::None, EndpointPorts::PRODUCT, store.clone());
 
     let before = store.providers_with_dialing_workers().unwrap();
     dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap();
@@ -106,7 +106,7 @@ async fn a_hub_knows_which_providers_workers_dial_it_from_its_instances_records(
 async fn a_ticket_for_a_worker_on_the_hubs_machine_names_loopback_alone_and_no_relay() {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(store_with_session(dir.path()));
-    let dial = WorkerDial::new(dir.path(), Relays::N0, store);
+    let dial = WorkerDial::new(dir.path(), Relays::N0, EndpointPorts::PRODUCT, store);
 
     let ticket = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
 
@@ -115,6 +115,8 @@ async fn a_ticket_for_a_worker_on_the_hubs_machine_names_loopback_alone_and_no_r
     assert!(ticket.hub.direct.iter().all(|addr| addr.ip().is_loopback()), "{:?}", ticket.hub);
     assert!(dial.is_bound(Endpoint::Loopback));
     assert!(!dial.is_bound(Endpoint::Relayed), "nothing but loopback was bound");
+    let written = dialing::address_file::read(&dir.path().join(protocol::paths::LOOPBACK_WORKER_ADDRESS_FILE));
+    assert_eq!(written.unwrap(), ticket.hub, "where a local worker finds it once a dial has failed");
 }
 
 /// Both endpoints admit by the same records, so a worker is admitted wherever it dials, by its ticket and then its key.
@@ -130,4 +132,13 @@ async fn either_endpoint_admits_a_worker_by_a_ticket_the_other_made() {
 
     assert_eq!(admitted_as(outcome), InstanceId::from("w"));
     assert!(dial.worker(&"w".into(), WITHIN).await.is_some());
+}
+
+/// A test's hub given ports that would run past the last is refused them, rather than given fewer.
+#[test]
+fn a_tests_ports_past_the_last_port_are_none() {
+    assert!(EndpointPorts::for_a_test(u16::MAX - 2).is_none());
+    let ports = EndpointPorts::for_a_test(10_000).unwrap();
+    assert!(ports.loopback.contains(10_001) && !ports.loopback.contains(10_002));
+    assert!(ports.relayed.contains(10_002) && ports.relayed.contains(10_003));
 }

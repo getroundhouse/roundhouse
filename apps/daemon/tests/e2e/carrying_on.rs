@@ -91,6 +91,47 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
     assert_eq!(log.unwrap().matches("\"event\":\"hub.admitted\"").count(), 2);
 }
 
+/// As another hub on the machine can, or any program binding a port by its number: the port the hub kept for its
+/// loopback endpoint is taken while it restarts, so the next hub binds another, and its local worker, which has no
+/// relay to fall back on, finds it there by the address file the hub writes, and its agent carries on.
+#[test]
+fn a_local_worker_finds_a_hub_that_came_back_on_another_port() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    let go = stack.path("go");
+    client.session_prompt(&session.id, &format!("say:before; hang-until:{}; say:after", go.display()), None).unwrap();
+    wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
+    drop(client);
+    let kept = kept_loopback_port(&stack);
+
+    restart(&mut stack);
+    let _taken = hold_port(kept);
+    stack.start_hub();
+    std::fs::write(&go, "").unwrap();
+
+    let events = wait_for_turn_end(&stack.client(), &session.id, 1);
+    assert_one_agent_said_it_all_once(&events, "beforeafter");
+    assert_ne!(kept_loopback_port(&stack), kept, "the next hub bound another port");
+    let log = protocol::paths::worker_log(&stack.paths().worker_logs_dir, &workspace.instance_id);
+    assert!(std::fs::read_to_string(log).unwrap().contains("\"event\":\"hub.moved\""), "it looked the hub up again");
+}
+
+/// The port the stack's hub keeps for its loopback endpoint, as its key's file says.
+fn kept_loopback_port(stack: &Stack) -> u16 {
+    let file = stack.paths().data_dir.join(protocol::paths::LOOPBACK_WORKER_ENDPOINT_FILE);
+    let kept: serde_json::Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+    u16::try_from(kept["port"].as_u64().unwrap()).unwrap()
+}
+
+/// Holds `port` on loopback, as a program other than the hub would, until it's dropped, once the hub that had it has
+/// let it go.
+pub(crate) fn hold_port(port: u16) -> std::net::UdpSocket {
+    waiting::thread::until_ok(support::TIMEOUT, || {
+        std::net::UdpSocket::bind(("127.0.0.1", port)).map_err(|e| e.to_string())
+    })
+}
+
 /// A message the agent was writing as its hub went is whole in the next hub's tail, with what it wrote while there was
 /// no hub, rather than starting from the next delta, so a chat shows it as it was until it's finished.
 #[test]

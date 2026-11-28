@@ -35,6 +35,7 @@ impl Running {
             build: protocol::Build::UNSTAMPED,
             network_address: ([127, 0, 0, 1], port).into(),
             relays: hub::Relays::None,
+            endpoint_ports: hub::EndpointPorts::PRODUCT,
             worker_exe: dir.path().join("unused-worker"),
             paths,
             shell: None,

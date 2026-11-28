@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::{Child, Stdio};
 
-use dialing::{HubEndpoint, Relays, read_frame, remote_key, write_frame};
+use dialing::{HubEndpoint, LOOPBACK_PORTS, Relays, read_frame, remote_key, write_frame};
 use process::testing::WholeEnvironment;
 use protocol::client::Outcome;
 use protocol::dialing::{Admission, Admitted, Ticket, TicketSecret, WorkerTicket};
@@ -33,11 +33,17 @@ fn start_worker(dir: &Path, ticket: &WorkerTicket) -> Child {
         .unwrap()
 }
 
-/// The next worker that dials, admitted as instance `i` whatever it says, and what it said.
+/// The next worker that dials, admitted as instance `i` whatever it says, and what it said. Past a handshake the
+/// worker cut short, as it does one still under way after a quarter of a second, such as one that began before the
+/// hub was there, and dials again, as the hub's own endpoint passes over one.
 async fn admit(
     hub: &HubEndpoint,
 ) -> (dialing::Connection, dialing::SendStream, dialing::RecvStream, String, Admission) {
-    let connection = hub.accept().await.unwrap().await.unwrap();
+    let connection = loop {
+        if let Ok(connection) = hub.accept().await.unwrap().await {
+            break connection;
+        }
+    };
     let (mut send, mut recv) = connection.accept_bi().await.unwrap();
     let admission: Admission = read_frame(&mut recv).await.unwrap();
     write_frame(&mut send, &Outcome::Response(Admitted { instance_id: "i".into() })).await.unwrap();
@@ -76,7 +82,7 @@ impl NextHub {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let key_file = data_dir.join(protocol::paths::LOOPBACK_WORKER_ENDPOINT_FILE);
         let (hub, connection, mut send, mut recv) = runtime.block_on(async {
-            let hub = HubEndpoint::bind(&key_file, Relays::None).await.unwrap();
+            let hub = HubEndpoint::bind(&key_file, Relays::None, LOOPBACK_PORTS).await.unwrap();
             let (connection, send, recv, _, _) = tokio::time::timeout(TIMEOUT, admit(&hub)).await.unwrap();
             (hub, connection, send, recv)
         });
@@ -129,7 +135,7 @@ fn a_worker_given_a_ticket_dials_its_hub_and_dials_again_once_the_connection_dro
     let dir = tempfile::tempdir().unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
-        let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None).await.unwrap();
+        let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None, LOOPBACK_PORTS).await.unwrap();
         let secret = TicketSecret::from("the-secret".to_string());
         let ticket = WorkerTicket::from(&Ticket { hub: hub.address().await, secret: secret.clone() });
         let mut worker = start_worker(dir.path(), &ticket);
@@ -165,7 +171,7 @@ fn a_worker_started_detached_returns_at_once_and_dials_from_its_port() {
     let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
-        let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None).await.unwrap();
+        let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None, LOOPBACK_PORTS).await.unwrap();
         let ticket = WorkerTicket::from(&Ticket {
             hub: hub.address().await,
             secret: TicketSecret::from("the-secret".to_string()),
@@ -206,7 +212,8 @@ fn a_worker_started_detached_returns_at_once_and_dials_from_its_port() {
 fn end_worker_ends_the_worker_serving_its_state_directory() {
     let dir = tempfile::tempdir().unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let hub = runtime.block_on(HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None)).unwrap();
+    let hub =
+        runtime.block_on(HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None, LOOPBACK_PORTS)).unwrap();
     let secret = TicketSecret::from("the-secret".to_string());
     let ticket = WorkerTicket::from(&Ticket { hub: runtime.block_on(hub.address()), secret });
     let mut worker = start_worker(dir.path(), &ticket);

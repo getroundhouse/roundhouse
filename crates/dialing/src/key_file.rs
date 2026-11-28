@@ -1,7 +1,6 @@
 //! The hub's endpoint's key, and the port it last bound, kept in the hub's data directory so a worker finds it again
 //! after the hub restarts, at the key and the addresses its ticket names.
 
-use std::io::Write as _;
 use std::path::Path;
 
 use base64::Engine as _;
@@ -46,8 +45,5 @@ pub(crate) fn write(path: &Path, key: &SecretKey, port: Option<u16>) -> Result<(
     let io = |source| DialError::KeyFile { path: path.to_path_buf(), source };
     let kept = Kept { key: URL_SAFE_NO_PAD.encode(key.to_bytes()), port };
     let json = serde_json::to_vec(&kept).map_err(|e| io(std::io::Error::other(e)))?;
-    let partial = path.with_extension("partial");
-    let mut file = private_files::file_options().write(true).create(true).truncate(true).open(&partial).map_err(io)?;
-    file.write_all(&json).and_then(|()| file.sync_all()).map_err(io)?;
-    std::fs::rename(&partial, path).map_err(io)
+    crate::private_file::write(path, &json).map_err(io)
 }

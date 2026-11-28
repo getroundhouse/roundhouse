@@ -1,4 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr};
+use std::ops::Range;
 use std::path::Path;
 use std::time::Duration;
 
@@ -19,12 +20,31 @@ const ONLINE_WITHIN: Duration = Duration::from_secs(5);
 const BOUND_AGAIN_WITHIN: Duration = Duration::from_secs(2);
 
 /// The UDP ports a loopback endpoint binds, below the range any of the systems the hub runs on gives out for ephemeral
-/// ports: Linux's starts at 32768, and macOS's and Windows' at 49152. So no program's socket bound to any port takes
-/// one while the hub restarts, and a worker on the hub's machine, with no relay to fall back on, finds the hub where
-/// its ticket says. Above the ports a system keeps for its own services.
-pub(crate) const LOOPBACK_PORTS: std::ops::Range<u16> = 20_000..32_768;
+/// ports: Linux's starts at 32768, and macOS's and Windows' at 49152, and above the ports a system keeps for its own
+/// services. So no socket the system gives a port of its own choosing takes the port while the hub restarts. Another
+/// hub on the machine draws from the same range, though, and can take it then, as can a program that binds one of
+/// these by number. A local worker, with no relay to fall back on, then finds the hub at the port it moved to by the
+/// address file the hub writes, as `crate::address_file` says.
+pub const LOOPBACK_PORTS: Ports = Ports(20_000..32_768);
 
-/// How many ports of [`LOOPBACK_PORTS`] a loopback endpoint tries before it gives up.
+/// UDP ports a hub's endpoint binds, of which there's always at least one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ports(Range<u16>);
+
+impl Ports {
+    /// The ports of `range`, or `None` for a range with none.
+    #[must_use]
+    pub fn new(range: Range<u16>) -> Option<Self> {
+        (!range.is_empty()).then_some(Self(range))
+    }
+
+    #[must_use]
+    pub fn contains(&self, port: u16) -> bool {
+        self.0.contains(&port)
+    }
+}
+
+/// How many ports of its range a loopback endpoint tries before it gives up.
 const LOOPBACK_TRIES: u16 = 64;
 
 /// Which relays the hub's endpoint uses, which the tickets it makes name, so its workers use them too.
@@ -32,8 +52,8 @@ const LOOPBACK_TRIES: u16 = 64;
 pub enum Relays {
     /// iroh's default, n0's public relays, until a hub can name its own.
     N0,
-    /// None, so every connection is direct, and the endpoint binds only to loopback, at a port in
-    /// [`LOOPBACK_PORTS`], which keeps it off the internet. The endpoint the hub's own machine's workers dial is
+    /// None, so every connection is direct, and the endpoint binds only to loopback, at a port in the range it's
+    /// given, [`LOOPBACK_PORTS`] but for a test's, which keeps it off the internet. The endpoint the hub's own machine's workers dial is
     /// this, and a test's other endpoint too.
     None,
 }
@@ -46,18 +66,18 @@ pub struct HubEndpoint {
 
 impl HubEndpoint {
     /// Binds the endpoint with the key at `key_file`, made first if there's none, on the UDP port it bound last, or on
-    /// another if that one's taken, which it keeps for next time.
-    pub async fn bind(key_file: &Path, relays: Relays) -> Result<Self, DialError> {
+    /// another if that one's taken, which it keeps for next time. One with no relays takes a port in `ports`.
+    pub async fn bind(key_file: &Path, relays: Relays, ports: Ports) -> Result<Self, DialError> {
         let (key, port) = key_file::read_or_make(key_file)?;
         let endpoint = match port {
             Some(kept) => match bind_again(&key, relays, kept).await {
                 Ok(endpoint) => endpoint,
                 Err(e) => {
                     warn!(name: "endpoint.port_taken", port = kept, error = %e, "Couldn't bind the port the hub's endpoint had, so it takes another");
-                    bind_another(&key, relays).await?
+                    bind_another(&key, relays, ports).await?
                 }
             },
-            None => bind_another(&key, relays).await?,
+            None => bind_another(&key, relays, ports).await?,
         };
         let bound = endpoint.bound_sockets().iter().find(|socket| socket.is_ipv4()).map(SocketAddr::port);
         if bound != port {
@@ -105,21 +125,22 @@ async fn bind_again(key: &iroh::SecretKey, relays: Relays, port: u16) -> Result<
     }
 }
 
-/// Binds a port of its own choosing: any the system gives, or, on loopback, the first of [`LOOPBACK_PORTS`] that's
-/// free, from one the key picks, so hubs with different keys mostly try different ones.
-async fn bind_another(key: &iroh::SecretKey, relays: Relays) -> Result<Endpoint, DialError> {
+/// Binds a port of its own choosing: any the system gives, or, on loopback, the first of `ports` that's free, from one
+/// the key picks, so hubs with different keys mostly try different ones.
+async fn bind_another(key: &iroh::SecretKey, relays: Relays, Ports(range): Ports) -> Result<Endpoint, DialError> {
     if relays == Relays::N0 {
         return bind(key, relays, 0).await;
     }
-    let ports = LOOPBACK_PORTS.end - LOOPBACK_PORTS.start;
+    // At least one, as `Ports` holds.
+    let ports = range.end - range.start;
     let picked = key
         .public()
         .as_bytes()
         .iter()
         .fold(0u16, |picked, byte| picked.wrapping_mul(31).wrapping_add(u16::from(*byte)));
     let mut last = None;
-    for tried in 0..LOOPBACK_TRIES {
-        let port = LOOPBACK_PORTS.start + picked.wrapping_add(tried) % ports;
+    for tried in 0..LOOPBACK_TRIES.min(ports) {
+        let port = range.start + picked.wrapping_add(tried) % ports;
         match bind(key, relays, port).await {
             Ok(endpoint) => return Ok(endpoint),
             Err(e) => last = Some(e),

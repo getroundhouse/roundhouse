@@ -53,6 +53,9 @@ pub const WORKER_SOCKET_FILE: &str = "worker.sock";
 /// The key of the hub's endpoint that the workers on its own machine dial, on loopback, and the port it keeps, in its
 /// data directory.
 pub const LOOPBACK_WORKER_ENDPOINT_FILE: &str = "loopback-worker-endpoint.json";
+/// Where that endpoint is now, which the hub writes each time it binds it, so a local worker whose dial fails finds a
+/// hub that came back on another port. Apart from the key's file, since it's what a worker reads, and holds no secret.
+pub const LOOPBACK_WORKER_ADDRESS_FILE: &str = "loopback-worker-address.json";
 /// The same of its endpoint on its relays, which the workers on other machines dial.
 pub const WORKER_ENDPOINT_FILE: &str = "worker-endpoint.json";
 
