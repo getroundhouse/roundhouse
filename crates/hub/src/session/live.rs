@@ -232,7 +232,8 @@ impl LiveSession {
 
     /// Has a session that was made before its agent's worker dialed the hub carry on with `carried`, as one made after
     /// does, as a workspace whose worker dialed late has each of its sessions do. A client could have followed the
-    /// session meanwhile, which makes it, with no agent, and what it recorded since is what the agent finds. The
+    /// session meanwhile, which makes it, with no agent, and what it recorded since is what the agent finds. One whose
+    /// agent is on a worker that has dialed again has it go on over the new connection. The
     /// `capabilities` are what the session's record says its run claims now. Does
     /// nothing to one that has an agent already.
     pub(crate) fn carry_on_with(
@@ -243,7 +244,17 @@ impl LiveSession {
         let CarriedOver { link, run, recorded, untaken } = carried;
         {
             let mut state = self.state.lock();
-            if state.agent.is_some() {
+            if let Some(agent) = &mut state.agent {
+                // Its worker dialed again after its connection dropped, so the same run is on a new link, which is the
+                // one its events come on from now. A run that's another is one this session has moved on to.
+                let rebound = agent.run == run && agent.link != link;
+                if rebound {
+                    agent.link = link;
+                }
+                drop(state);
+                if rebound {
+                    self.ask_for_reconnects();
+                }
                 return;
             }
             state.agent = Some(AgentRun { link, run });

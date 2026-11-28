@@ -9,6 +9,7 @@ mod background;
 mod chats;
 mod conversations;
 mod cover_lines;
+mod disconnected;
 mod launching;
 mod mode_told;
 mod observed;

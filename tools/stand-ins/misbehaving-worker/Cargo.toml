@@ -13,6 +13,7 @@ dialing.workspace = true
 process = { workspace = true, features = ["testing"] }
 protocol.workspace = true
 tokio.workspace = true
+worker.workspace = true
 
 [lints]
 workspace = true

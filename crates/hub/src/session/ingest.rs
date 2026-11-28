@@ -25,7 +25,9 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Retrying { run, retrying } => session.retrying(run, retrying),
             Item::Report { run, report, .. } => session.take_report(run, report).await,
-            Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
+            Item::AgentLost { link, reason } => {
+                session.agent_lost(link, reason).await;
+            }
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {
                 let _ = done.send(());
@@ -244,7 +246,8 @@ impl LiveSession {
     }
 
     /// Reports that the agent is gone, unless a newer one has already replaced it.
-    pub(crate) async fn agent_lost(&self, link: WorkerLinkId, reason: ExitReason) {
+    /// Whether it was, so the caller knows what it recorded.
+    pub(crate) async fn agent_lost(&self, link: WorkerLinkId, reason: ExitReason) -> bool {
         let lost = {
             let mut state = self.state.lock();
             let lost = state.agent.filter(|agent| agent.link == link);
@@ -263,13 +266,17 @@ impl LiveSession {
             let body = EventBody::AgentExited { reason, code: None, signal: None, stderr_tail: vec![] };
             self.record_or_log(Origin::Run { run: lost.run, current: true, numbered: None }, body).await;
         }
+        lost.is_some()
     }
 
-    /// Interrupts the session, whose agent isn't on the worker its hub has reached, as the hub does for one
-    /// that isn't live as it starts: its open approvals are cancelled, and the prompts its agent hadn't taken are dropped. Then
-    /// its agent's exit is recorded as the hub's restart, which leaves a session whose only work is a wait that the hub
+    /// Interrupts the session, whose agent isn't on its workspace's worker, which the hub has reached again, whether an
+    /// earlier hub left it or its connection dropped: its open approvals are cancelled, and the prompts its agent hadn't
+    /// taken are dropped. Then its agent's exit is recorded for `reason`, which says whether it was the hub's restart or
+    /// the worker's loss, which leaves a session whose only work is a wait that the hub
     /// keeps, `waiting`, still at work in the background.
-    pub(crate) async fn interrupted_by_restart(&self, waiting: bool) {
+    pub(crate) async fn interrupted_with_no_agent(&self, waiting: bool, reason: ExitReason) {
+        // It's not on the worker, so the next prompt starts one rather than finding this one lost.
+        self.state.lock().agent = None;
         self.cancel_approvals(None).await;
         let untaken = self.state.lock().progress.queue.untaken().to_vec();
         for prompt in untaken {
@@ -278,8 +285,7 @@ impl LiveSession {
         if waiting {
             self.outlive_this_hub().await;
         }
-        let body =
-            EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
+        let body = EventBody::AgentExited { reason, code: None, signal: None, stderr_tail: vec![] };
         self.record_or_log(Origin::Hub, body).await;
     }
 

@@ -26,7 +26,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [provider-adapters-over-stdio.md](provider-adapters-over-stdio.md) | A provider's adapter is a separate program that the hub runs over stdio |
 | [providers-reach-their-own-machines.md](providers-reach-their-own-machines.md) | The hub runs every provider's adapter itself, and each adapter reaches its machines its own way |
 | [workers-dial-the-hub.md](workers-dial-the-hub.md) | Every worker dials its hub, with a ticket the hub gives it, and no provider sits between them |
-| [silence-never-ends-a-worker.md](silence-never-ends-a-worker.md) | A worker the hub can't reach is disconnected until it dials back or is shown to be gone, and silence never ends it. Not built |
+| [silence-never-ends-a-worker.md](silence-never-ends-a-worker.md) | A worker the hub can't reach is disconnected until it dials back or is shown to be gone, and silence never ends it. Partly built |
 | [remote-workspace-vm.md](remote-workspace-vm.md) | A remote workspace runs in a VM of its own, not a container. Not built |
 | [base-image-is-an-instance.md](base-image-is-an-instance.md) | A base image is an instance, built through a worker. Not built |
 | [microsandbox-adapter.md](microsandbox-adapter.md) | The microsandbox adapter embeds microsandbox's library, rather than driving `msb`, and each sandbox's worker dials the hub through a forwarded port. Built in part |

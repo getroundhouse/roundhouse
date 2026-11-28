@@ -58,7 +58,8 @@ impl Hub {
     ///
     /// [`HubStatus::is_idle`]: protocol::client::HubStatus::is_idle
     pub(crate) fn shutdown_if_idle(&self) -> Result<(), ApiError> {
-        if !self.status().is_idle() {
+        // A workspace whose worker can't be reached is at work, since the agents it runs may be, and stopping ends it.
+        if !self.status().is_idle() || self.disconnected.any() {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub is busy, so it wasn't stopped"));
         }
         self.request_stop();

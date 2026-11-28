@@ -46,6 +46,12 @@ pub(crate) struct WorkerLink {
     pub(super) acks: Acks,
     /// Set as the hub leaves the worker running for the next hub, so its going isn't taken for the worker's.
     pub(super) left: AtomicBool,
+    /// Set once the hub has asked the worker to stop, or ended its connection: its stream ending after that is a
+    /// goodbye. Without it, a dialed worker whose stream ends has lost its connection, which says nothing of the worker.
+    pub(super) stopping: AtomicBool,
+    /// Set as the stream ends with no goodbye, before the calls waiting on it are failed, so whatever fails on this link
+    /// can tell that the connection dropped, which says nothing of the worker, from a worker that answered wrongly.
+    pub(super) dropped: AtomicBool,
     /// Which build the worker said it is, once it has said hello: `None` where its hello named none.
     pub(super) build: OnceLock<Option<String>>,
     /// The version of the protocol its hello chose, once it has said hello.
@@ -87,6 +93,8 @@ impl WorkerLink {
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            stopping: AtomicBool::new(false),
+            dropped: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::new(),
             tool_servers: watch::Sender::default(),
@@ -113,6 +121,12 @@ impl WorkerLink {
                 return Ok(link);
             }
             Err(failure) => failure,
+        };
+        // A connection that dropped as the worker was taken up says nothing of the worker, which dials again.
+        let failure = if opening == Opening::LeftRunning && link.was_dropped() {
+            ApiError::new(ErrorCode::Unavailable, "the worker's connection dropped as it was being taken up")
+        } else {
+            failure
         };
         link.kill();
         // A worker refused its instance says so, because another worker is serving it, which ending the instance would
@@ -185,6 +199,8 @@ impl WorkerLink {
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            stopping: AtomicBool::new(false),
+            dropped: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::new(),
             tool_servers: watch::Sender::default(),
@@ -254,12 +270,29 @@ impl WorkerLink {
         workers.get(id).is_some_and(|current| Arc::ptr_eq(current, self))
     }
 
+    /// Whether its stream ending says no more than that the connection did: the worker dialed the hub, and neither the
+    /// hub nor the worker said goodbye. Such a worker may be running yet, and dials again.
+    pub(crate) fn connection_dropped(&self) -> bool {
+        matches!(self.carrier, Carrier::Dialed(_)) && !self.stopping.load(Ordering::SeqCst)
+    }
+
+    /// Notes that its connection dropped with no goodbye, which [`WorkerLink::was_dropped`] then says.
+    pub(crate) fn note_dropped(&self) {
+        self.dropped.store(true, Ordering::SeqCst);
+    }
+
+    /// Whether its connection dropped with no goodbye, which a call that failed on it may have been waiting on.
+    pub(crate) fn was_dropped(&self) -> bool {
+        self.dropped.load(Ordering::SeqCst)
+    }
+
     pub(crate) fn is_open(&self) -> bool {
         !*self.closed.borrow() && self.calls.is_open()
     }
 
     /// Asks the worker to stop, and closes its stdin. It stops its agents, flushes, and exits.
     pub(crate) async fn close(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
         // Not waited for, since its reply can't come before what's ahead of it, such as an agent's last output.
         let _ = self.send(Stop).await;
         self.calls.close();
@@ -269,6 +302,7 @@ impl WorkerLink {
     /// what this hub has recorded, or `deadline` has passed.
     pub(crate) async fn leave(self: &Arc<Self>, hub: &Arc<Hub>, deadline: Instant) {
         self.left.store(true, Ordering::SeqCst);
+        self.stopping.store(true, Ordering::SeqCst);
         match tokio::time::timeout_at(deadline, self.acks.tell_and_wait(hub, self)).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -297,6 +331,7 @@ impl WorkerLink {
 
     /// Closes its stdin and ends the worker's command at once. Its provider ends the worker.
     pub(crate) fn kill(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
         self.calls.close();
         self.carrier.kill();
     }

@@ -10,9 +10,16 @@ use protocol::event::EventBody;
 use protocol::model::{RunId, Seq, SessionId};
 
 #[cfg(test)]
+mod disconnected_tests;
+#[cfg(test)]
 mod tests;
 
 mod disconnected;
+pub(super) use disconnected::not_connected;
+mod disconnected_workspaces;
+#[cfg(test)]
+pub(crate) use disconnected_workspaces::Cause;
+pub(crate) use disconnected_workspaces::{Asked, Disconnected, NextAsk};
 mod recovery;
 pub(crate) use recovery::LeftAtWork;
 #[cfg(test)]

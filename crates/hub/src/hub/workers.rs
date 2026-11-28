@@ -20,7 +20,7 @@ use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
 impl Hub {
-    pub(super) fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
+    pub(in crate::hub) fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
         self.worker_gates.lock().entry(workspace_id.clone()).or_default().clone()
     }
 
@@ -56,19 +56,17 @@ impl Hub {
         if let Some(found) = self.open_worker(workspace_id) {
             return Ok(found);
         }
-        // Starting a worker would end the one an earlier hub left there, which may be at work, so it's waited for.
-        if self.disconnected.lock().contains(workspace_id) {
-            return Err(ApiError::new(
-                ErrorCode::Unavailable,
-                "the workspace's worker hasn't connected to the hub since it started, and is waited for rather than replaced",
-            ));
-        }
+        self.refuse_while_disconnected(workspace_id).await?;
         let workspace = self.workspace(workspace_id).await?;
         jobs::step("waiting for its turn to start the workspace's worker");
         let gate = self.worker_gate(workspace_id);
         let mut cleared = gate.lock().await;
         if let Some(found) = self.open_worker(workspace_id) {
             return Ok(found);
+        }
+        // Again, since a connection can drop while this waits for its turn, and the worker that had it is still there.
+        if self.disconnected.contains(workspace_id) {
+            return Err(super::carrying_on::not_connected());
         }
         let provider = self.provider(&workspace.provider)?;
         // One whose connection has ended, but whose cleanup is waiting for this gate, may still hold the instance.
@@ -108,10 +106,12 @@ impl Hub {
         Ok(link)
     }
 
-    /// The worker an earlier hub left running on the workspace's instance, as the hub starts, and what it's running.
-    /// What it sends is held until [`WorkerLink::release`], so the hub can say first which agent each of its sessions
-    /// has. Not kept, until a session carries on with it. One that can't be reached, or doesn't say what it's running,
-    /// is ended, as [`Hub::end_left_running`] says.
+    /// The worker running on the workspace's instance that the hub has no connection to, which an earlier hub left, as
+    /// the hub starts, or whose connection to this hub dropped, and what it's running. What it sends is held until
+    /// [`WorkerLink::release`], so the hub can say first which agent each of its sessions has. Not kept, until a session
+    /// carries on with it. One that hasn't dialed, or whose connection dropped as it was taken up, is `Unavailable`,
+    /// and left, since it may be at work. One that's gone, or can't be reached some other way, or doesn't say what it's
+    /// running, is ended, as [`Hub::end_left_running`] says.
     pub(crate) async fn worker_left_running(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
@@ -138,6 +138,10 @@ impl Hub {
         drop(cleared);
         match link.running_agents().await {
             Ok(running) => Ok((link, running)),
+            // Its connection dropped as it was taken up, which says nothing of the worker, which dials again.
+            Err(_) if link.was_dropped() => {
+                Err(ApiError::new(ErrorCode::Unavailable, "the worker's connection dropped as it was being taken up"))
+            }
             Err(e) => {
                 link.release(self).await;
                 self.end_left_running(workspace.id, Some(link));

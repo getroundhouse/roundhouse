@@ -171,6 +171,11 @@ impl WorkerDial {
         self.arrivals.take(instance_id, within).await
     }
 
+    /// Returns once the instance's worker has dialed and nobody has taken it up, as [`Arrivals::dialed_again`] says.
+    pub(crate) async fn dialed_again(&self, instance_id: &InstanceId) {
+        self.arrivals.dialed_again(instance_id).await;
+    }
+
     /// Refuses every worker that dials from now on, as the hub stops, before it leaves or stops its workers. A worker
     /// the hub leaves for the next dials again as soon as its connection ends, and one admitted then would be cut off
     /// as the hub goes, and dial the next hub only after that. Refused, it dials until the next hub is there.

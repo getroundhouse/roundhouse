@@ -41,6 +41,8 @@ mod reading;
 pub(crate) use at_once::ANSWERED_WITHIN;
 pub(crate) use at_once::answered_at_once;
 pub(crate) use reaching::Opening;
+#[cfg(test)]
+pub(crate) use reaching::dial_unless_gone;
 
 #[cfg(test)]
 mod stand_in;

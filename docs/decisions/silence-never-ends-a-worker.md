@@ -1,6 +1,6 @@
 # A worker the hub can't reach is disconnected until it dials back or is shown to be gone, and silence never ends it
 
-**Status:** Decided, not built.
+**Status:** Decided. Partly built: a hub waits for a worker it can't reach, whether an earlier hub left it or its connection dropped, asks its provider whether it's gone, and gives a prompt sent meanwhile to the agent once the worker is back.
 **First recorded:** 2026-11-27, in #2942.
 
 A worker's connection is how it talks to its hub, not proof that it's alive. When a hub restarts, a hub crashes or the network drops, the workspace is *disconnected* until its worker dials back, and then it carries on. The hub ends a worker only on proof that it's gone, or when the person says so, and never because it has gone quiet. A disconnected workspace counts as at work, so nothing replaces its worker. These still end a worker at once: a goodbye, meaning the worker closing its connection with a reason, the person stopping or archiving the workspace, and a connected worker that doesn't answer a call within its limit.

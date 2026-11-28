@@ -54,10 +54,10 @@ fn a_worker_that_dials_after_the_next_hub_serves_carries_on_with_its_agent() {
     assert_one_agent_said_it_all_once(&events, "beforeafter");
 }
 
-/// A chat sent to a workspace whose worker hasn't dialed yet doesn't start a worker, which would end the agent that's at
-/// work there.
+/// A prompt sent to a workspace whose worker hasn't dialed yet doesn't start a worker, which would end the agent that's
+/// at work there. It's recorded, and its agent takes it once the worker has dialed.
 #[test]
-fn a_prompt_sent_before_the_worker_dials_doesnt_replace_it() {
+fn a_prompt_sent_before_the_worker_dials_goes_to_its_agent_once_it_has() {
     let mut stack = through_an_adapter();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
@@ -70,13 +70,13 @@ fn a_prompt_sent_before_the_worker_dials_doesnt_replace_it() {
     stack.start_hub();
     let client = stack.client();
     assert_eq!(client.hub_status().unwrap().workers, 0, "the worker dialed within before_serving");
-    let _ = client.session_prompt(&session.id, "say:during", None);
-    wait_until("the worker to dial the next hub", || client.hub_status().unwrap().workers == 1);
-    client.session_prompt(&session.id, "say:after", None).unwrap();
+    client.session_prompt(&session.id, "say:during", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
 
     assert!(is_alive(agent), "the agent was replaced");
     assert_eq!(count(&events, |b| matches!(b, EventBody::AgentStarted { .. })), 1, "{events:#?}");
+    assert_eq!(count(&events, |b| matches!(b, EventBody::PromptDropped { .. })), 0, "{events:#?}");
+    assert_eq!(assistant_text(&events), "firstduring");
 }
 
 /// A stop says nothing carries on with a worker, so it ends one the hub has no connection to, through its provider.

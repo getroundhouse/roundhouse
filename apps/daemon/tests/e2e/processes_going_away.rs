@@ -76,9 +76,12 @@ fn a_worker_crash_is_reported_and_the_next_prompt_gets_a_new_worker() {
     // SAFETY: kill(2) has no memory effects. This is the worker's PID, read just above.
     unsafe { libc::kill(worker_pid, libc::SIGKILL) };
 
-    wait_for_status(&client, &session.id, SessionStatus::Interrupted);
-    let events = read_all(&client, &session.id);
-    assert!(events.iter().any(|e| matches!(e.body, EventBody::AgentExited { reason: ExitReason::WorkerLost, .. })));
+    // Killed as it starts, so the prompt it hadn't answered may be dropped before its exit, which leaves the chat idle
+    // rather than interrupted, as a turn that never started isn't cut off.
+    let lost = |events: &[protocol::event::SessionEvent]| {
+        events.iter().any(|e| matches!(e.body, EventBody::AgentExited { reason: ExitReason::WorkerLost, .. }))
+    };
+    wait_until("the loss of the agent to be recorded", || lost(&read_all(&client, &session.id)));
 
     wait_until("the agent to stop along with its worker", || !is_alive(agent_pid));
 

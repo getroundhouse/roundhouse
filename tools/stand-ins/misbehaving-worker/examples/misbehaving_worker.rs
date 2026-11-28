@@ -7,6 +7,9 @@
 //!
 //! - `another-version`: answers the hub's hello as a worker that speaks another version of the worker protocol.
 //! - `silent`: answers nothing.
+//! - `drops-when-asked-what-it-runs`: answers the hub as a worker running nothing does, but ends its connection, with
+//!   no goodbye, the first time it's asked which agents it's running, which is as the hub takes it up. It dials again,
+//!   and answers.
 //!
 //! It holds its connection until it's ended, or its test has gone.
 
@@ -18,11 +21,12 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use dialing::{WorkerEndpoint, read_frame, write_frame};
-use process::ProcessRecord;
 use process::testing::TestProcess;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::dialing::WorkerTicket;
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome};
+use protocol::worker::{
+    HelloReply, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 
 /// What says how it misbehaves.
 const MISBEHAVES: &str = "MISBEHAVING_WORKER";
@@ -37,7 +41,8 @@ fn main() {
     }
     let state_dir = PathBuf::from(after(&args, "--state-dir"));
     std::fs::create_dir_all(&state_dir).unwrap();
-    ProcessRecord::write(&state_dir.join(protocol::paths::WORKER_RECORD_FILE), std::process::id()).unwrap();
+    // As a worker claims its instance, with the worker's own code, which also records it as the worker serving it.
+    let claim = worker::claim_instance(&state_dir).unwrap();
     let misbehaves = std::env::var(MISBEHAVES).unwrap();
     let test = TestProcess::from_env(|name| std::env::var(name).ok());
     tokio::runtime::Runtime::new().unwrap().block_on(async move {
@@ -46,6 +51,7 @@ fn main() {
             () = TestProcess::until_gone(test) => {}
         }
     });
+    drop(claim);
 }
 
 /// Itself again, without `--detach`, apart from what ran it, as a worker starts itself, given `ticket` on its stdin.
@@ -55,11 +61,19 @@ fn start_apart(args: &[OsString], ticket: &str) {
         .args(args.iter().filter(|arg| *arg != "--detach"))
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(log_of(args));
     process::detach(&mut command);
     #[expect(clippy::zombie_processes, reason = "never waited on, since the point is that it outlives this process")]
     let mut started = command.spawn().unwrap();
     started.stdin.take().unwrap().write_all(ticket.as_bytes()).unwrap();
+}
+
+/// Where a worker's stderr goes, which is the log it's given, so what stops this one, such as a claim it can't take, is
+/// there for a test that fails to say.
+fn log_of(args: &[OsString]) -> Stdio {
+    let Some(at) = args.iter().position(|arg| arg == "--log") else { return Stdio::null() };
+    let log = std::fs::OpenOptions::new().create(true).append(true).open(&args[at + 1]).unwrap();
+    Stdio::from(log)
 }
 
 /// The argument after `flag`.
@@ -81,7 +95,47 @@ async fn misbehave(ticket: &str, how: &str) {
             write_frame(&mut admitted.send, &reply).await.unwrap();
         }
         "silent" => {}
+        "drops-when-asked-what-it-runs" => answer_dropping_once(&endpoint, &ticket.secret, admitted).await,
         other => panic!("{MISBEHAVES} is {other:?}, which isn't a way it misbehaves"),
     }
     std::future::pending::<()>().await;
+}
+
+/// Answers every call the hub makes of a worker as one running nothing does, over each connection it dials, and ends
+/// the first connection it's asked which agents it runs on, with no goodbye. Dials again whenever a connection ends.
+#[expect(clippy::disallowed_methods, reason = "the pause between dials that failed")]
+async fn answer_dropping_once(
+    endpoint: &WorkerEndpoint,
+    secret: &protocol::dialing::TicketSecret,
+    mut admitted: dialing::Admitted,
+) {
+    let mut dropped = false;
+    loop {
+        while let Ok(call) = read_frame::<WorkerCall>(&mut admitted.recv).await {
+            let response = match call.request {
+                WorkerRequest::Hello(hello) => {
+                    WorkerResponse::Hello(HelloReply { protocol_version: hello.protocol_version, build: None })
+                }
+                WorkerRequest::RunningAgents if !dropped => {
+                    dropped = true;
+                    admitted.connection.close(2u32.into(), b"a connection that drops");
+                    break;
+                }
+                WorkerRequest::RunningAgents => {
+                    WorkerResponse::RunningAgents(RunningAgentsReply { agents: Vec::new() })
+                }
+                _ => WorkerResponse::Ok,
+            };
+            let reply = WorkerFrame::Reply { id: call.id, outcome: WorkerOutcome::Response(response) };
+            if write_frame(&mut admitted.send, &reply).await.is_err() {
+                break;
+            }
+        }
+        admitted = loop {
+            match endpoint.dial_admitted(secret).await {
+                Ok(admitted) => break admitted,
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            }
+        };
+    }
 }
