@@ -7,7 +7,7 @@ A new workspace is a fresh worktree, so it has no `node_modules`, no build outpu
 Once a workspace's worktree exists, Roundhouse does two things in it:
 
 1. **Copies the files git ignores that the worktree needs,** such as `.env`, from your repository.
-2. **Runs the repository's setup script,** with `bash`, in the worktree.
+2. **Runs the repository's setup script,** with `bash`, in the worktree. On Windows that's Git for Windows' `bash`.
 
 Setup runs in the background. A prompt you send meanwhile is recorded at once, and reaches the agent when setup finishes. Bringing an archived workspace back runs setup again.
 

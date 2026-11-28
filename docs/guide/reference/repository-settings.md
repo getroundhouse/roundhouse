@@ -33,7 +33,7 @@ archive = "docker compose down"
 | `scripts.archive` | Runs as a workspace is archived |
 | `file_include_globs` | Which ignored files to copy into a new worktree, a pattern to a line |
 
-Scripts run with `bash`, in the worktree, with the variables below.
+Scripts run with `bash`, in the worktree, with the variables below. On Windows that's Git for Windows' `bash`, the one installed with `git`, so a script finds Git's programs, such as `touch` and `sleep`. Without it, a script fails, and its log says why.
 
 Run scripts, `run_mode` and managed settings aren't read.
 

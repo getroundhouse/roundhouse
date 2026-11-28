@@ -6,6 +6,7 @@ mod asks;
 #[cfg(unix)]
 mod attach;
 pub mod attachments;
+mod bash;
 mod branch_watch;
 mod changes_watch;
 mod claim;

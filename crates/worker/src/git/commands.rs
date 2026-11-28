@@ -69,6 +69,14 @@ pub(crate) async fn version(given: &Environment) -> Result<String, ApiError> {
     git_ok(given, Path::new("."), &["--version"]).await
 }
 
+/// Where git keeps the programs it runs, as `git --exec-path` says, which is inside the folder git is installed in,
+/// such as `C:/Program Files/Git/mingw64/libexec/git-core` for Git for Windows.
+#[cfg(windows)]
+pub(crate) async fn exec_path(given: &Environment) -> Result<PathBuf, ApiError> {
+    let said = git_ok_bytes(given, Path::new("."), &["--exec-path"]).await?;
+    Ok(super::path_from_git(said.trim_ascii_end()))
+}
+
 pub(super) async fn git(given: &Environment, cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
     let output = run(given, cwd, args).await?;
     Ok(GitOutput {

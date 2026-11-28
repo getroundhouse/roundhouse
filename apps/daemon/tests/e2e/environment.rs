@@ -1,4 +1,5 @@
-//! What the stack's processes run in: the environment a test gives them, and nothing of its own.
+//! What the stack's processes run in: the environment a test gives them, and nothing of its own, and on Windows the
+//! `bash` a setup script runs in.
 
 #![cfg(test)]
 
@@ -23,6 +24,22 @@ fn nothing_of_the_tests_own_environment_reaches_what_the_stack_starts() {
     let env = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("agent-env.txt")).unwrap();
     assert!(env.lines().any(|line| line.starts_with("PATH=")), "it isn't an environment: {env}");
     assert!(!env.lines().any(|line| line.starts_with("CARGO_MANIFEST_DIR=")), "{env}");
+}
+
+/// A setup script on Windows runs in Git for Windows' `bash`, which says it's `Msys`, whatever comes first on `PATH`.
+/// Not WSL's, which System32 has, and which Windows finds first for a program named without a path, and which runs
+/// the script in Linux, saying `GNU/Linux`.
+#[cfg(windows)]
+#[test]
+fn a_setup_script_on_windows_runs_in_gits_bash() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"uname -o > system.txt\"\n");
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+
+    assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded);
+    let system = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("system.txt")).unwrap();
+    assert_eq!(system.trim_end(), "Msys");
 }
 
 /// What a hub merges over its own environment: what the user's login shell has once it has read their profile, started
