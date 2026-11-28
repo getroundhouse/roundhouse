@@ -19,8 +19,9 @@ const PROPOSE_DESCRIPTION: &str = "Asks the person to decide something too large
     comparison, code or a picture to judge the options, such as choosing between architectures. Give it 1 to 4 \
     questions, each with 2 to 4 options, and each option a label, a one-line description and a body in \
     Markdown that says what it is and what it costs. Draw a diagram in Mermaid, in a code block whose language is \
-    `mermaid`. To show another picture, such as a screenshot, save it in the worktree and point to it with a Markdown \
-    image: Roundhouse keeps a copy with the proposal, as the file is when you propose. Recommend one, and say why, \
+    `mermaid`. To show another picture, such as a screenshot, or a video, such as a recording of a change at work, \
+    save it in the worktree and point to it with a Markdown image: Roundhouse keeps a copy with the proposal, as the \
+    file is when you propose. A video plays if it's a WebM in VP8 or VP9. Recommend one, and say why, \
     when you have a view. It returns at once: the person answers later, and their answer, or their request for \
     another round, which you answer with revise_proposal, comes to you as a prompt. To change it later, revise it \
     rather than proposing again. Withdraw it with withdraw_proposal once it's obsolete or you won't use it, so it \
