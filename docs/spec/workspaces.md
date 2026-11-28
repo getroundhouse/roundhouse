@@ -112,7 +112,7 @@
 
 - **The new title names the work as a whole, from every chat's prompts, oldest first,** by a call like the one for the first title. It names one thing, and never a chore such as a review or merging, which most workspaces end with and a model given only the newest prompt would name. Of each prompt it's given the start, and of a long history the first prompt and the newest, so the call stays as small as the first. It's given the oldest of their images, by the first title's limits, since the first prompt's set the task. *Unconfirmed.*
 - **A new title that's asked for replaces one typed by hand too, but not one set while it's on its way,** so renaming by hand always wins over a call that's slow to answer. *Unconfirmed.*
-- **While a new title is on its way, the workspace's row says Renaming… and the header's button spins,** so it's clear the press took, and neither asks again. If none comes, such as when the agent's CLI isn't logged in, the app says why and the title stays. *Unconfirmed.*
+- **While a new title is on its way, the workspace's row says Renaming… and the header's button waits, with a task's ring in its icon's place,** so it's clear the press took, and neither asks again. If none comes, such as when the agent's CLI isn't logged in, the app says why and the title stays. *Unconfirmed.* *Not built:* the ring, where the button draws the kit's spinner.
 
   **Waiting for a new title, asked for from the header.** *Unconfirmed.*
 

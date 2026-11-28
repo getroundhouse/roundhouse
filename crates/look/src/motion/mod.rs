@@ -12,3 +12,6 @@ pub use edge::ScrollingOn;
 
 mod transitions;
 pub use transitions::{FADE, PANEL, SCROLL, Scrolling, Sliding, fade};
+
+#[cfg(test)]
+mod tests;
