@@ -118,10 +118,11 @@ fn no_canvas_names_a_token_the_design_system_does_not_have() {
 /// Each foundation's board, and how the names of the tokens it shows begin. It draws every one of them in its frame named
 /// `Values`, as `docs/standards/design.md` says. Its other frames, such as the heading and the rail, draw with some of
 /// the same tokens, so what they draw isn't counted.
-const BOARDS: [(&str, &[&str]); 3] = [
+const BOARDS: [(&str, &[&str]); 4] = [
     ("Foundations/Colours.bl", &["color.", "strength.", "shadow."]),
     ("Foundations/Type.bl", &["font.", "typography."]),
     ("Foundations/Space and shape.bl", &["spacing.", "radius.", "stroke.width.", "size."]),
+    ("Foundations/Motion.bl", &["motion."]),
 ];
 
 /// The rows of the frame in `canvas` named `name`: its own, and the ones under it, which are indented further.

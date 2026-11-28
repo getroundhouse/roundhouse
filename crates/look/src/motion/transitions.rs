@@ -12,6 +12,16 @@ pub const FADE: Duration = Duration::from_millis(200);
 /// slide, since a scroll goes further, and rows passed more quickly can't be followed by eye.
 pub const SCROLL: Duration = Duration::from_millis(300);
 
+/// Every time above, by its name, from the shortest, as the spec's table and the gallery's sheet of them have it.
+#[cfg(any(test, feature = "testing"))]
+pub const ALL: [(&str, Duration); 3] = [("PANEL", PANEL), ("FADE", FADE), ("SCROLL", SCROLL)];
+
+/// How the spec's table writes a motion: its name and how long it takes.
+#[cfg(any(test, feature = "testing"))]
+pub fn written((name, time): (&str, Duration)) -> [String; 2] {
+    [name.to_string(), format!("{}ms", time.as_millis())]
+}
+
 /// For something small fading in or out. It slows as it arrives, which is the kit's curve for a transition.
 pub fn fade() -> Transition {
     Transition::new(FADE)

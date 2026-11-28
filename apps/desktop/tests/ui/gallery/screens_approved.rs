@@ -5,7 +5,7 @@ use super::{
     capture, cards, code_lines, colours, compaction_chats, component_screens, context_screens, controls,
     conversation_chats, corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats,
     failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows,
-    mark_states, menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens,
+    mark_states, menu_rows, motions, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens,
     small_things, spaces, steps, strengths, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
     tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
@@ -124,6 +124,7 @@ fn every_screen_looks_as_approved() {
             icon_sizes::NAME,
             spaces::NAME,
             strengths::NAME,
+            motions::NAME,
         ])
         .collect();
     problems.extend(DESKTOP.without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
@@ -188,6 +189,17 @@ fn every_corner_looks_as_approved() {
 
     let mut problems = DESKTOP.look_at(corners::NAME, corners::SPEC, &picture);
     problems.extend(places.look_at(corners::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_motion_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = motions::draw(&text_system);
+
+    let mut problems = DESKTOP.look_at(motions::NAME, motions::SPEC, &picture);
+    problems.extend(places.look_at(motions::NAME));
     report(&problems);
 }
 
