@@ -317,6 +317,10 @@ Six strengths have names of their own, since several places draw with them: what
 | `FADE` | 200ms | What comes and goes in place, such as the button back down to a chat's end and the archive button at a workspace's row's end |
 | `SCROLL` | 300ms | A scroll that passes rows on its way, such as a chat sent back down to its end |
 
+**Every motion, as a bar a pixel long for each millisecond it takes.**
+
+![Every motion](screens/motions.png)
+
 ## Layout
 
 - **A sidebar lists things to choose from, and what they open to is read in the workspace's pane,** as a file from Changes or All files opens in the file tab. A sidebar is too narrow for anything to read at length, such as a plan, a table or options compared side by side, and widening it far enough takes the room from the chat it would sit beside. So such things open in a tab in the pane, and never in a sidebar, even to keep them in sight of the chat.

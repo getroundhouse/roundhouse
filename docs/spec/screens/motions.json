@@ -1,0 +1,22 @@
+{
+  "look::motion": {
+    "FADE": {
+      "x": 212,
+      "y": 143,
+      "width": 400,
+      "height": 16
+    },
+    "PANEL": {
+      "x": 212,
+      "y": 63,
+      "width": 400,
+      "height": 16
+    },
+    "SCROLL": {
+      "x": 212,
+      "y": 223,
+      "width": 600,
+      "height": 16
+    }
+  }
+}

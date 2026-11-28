@@ -11,6 +11,8 @@ mod edge;
 pub use edge::ScrollingOn;
 
 mod transitions;
+#[cfg(any(test, feature = "testing"))]
+pub use transitions::{ALL, written};
 pub use transitions::{FADE, PANEL, SCROLL, Scrolling, Sliding, fade};
 
 #[cfg(test)]
