@@ -128,9 +128,10 @@ pub async fn copy_local_files(
     copied
 }
 
-/// Runs a script in the worktree, with its output going to `log`, and returns its exit code. In its own
-/// process group, so stopping it can stop what it started. With `env`, and then what the worker gives every process it
-/// starts.
+/// Runs a script in the worktree, in the `bash` scripts are written for, as [`crate::bash::find`] says, with its output
+/// going to `log`, and returns its exit code. One that can't run says why in `log` too, which is where a person reads
+/// what went wrong. In its own process group, so stopping it can stop what it started. With `env`, and then what the
+/// worker gives every process it starts.
 pub async fn run_script(
     given: &Environment,
     script: &str,
@@ -139,10 +140,26 @@ pub async fn run_script(
     log: &Path,
     on_start: impl FnOnce(u32),
 ) -> Result<std::process::ExitStatus, ApiError> {
+    let ran = run_in_bash(given, script, worktree, env, log, on_start).await;
+    if let Err(e) = &ran {
+        append_log(log, &e.message);
+    }
+    ran
+}
+
+async fn run_in_bash(
+    given: &Environment,
+    script: &str,
+    worktree: &Path,
+    env: &[(String, String)],
+    log: &Path,
+    on_start: impl FnOnce(u32),
+) -> Result<std::process::ExitStatus, ApiError> {
     let failed = |e: std::io::Error| ApiError::new(ErrorCode::Worker, format!("couldn't run the script: {e}"));
+    let bash = crate::bash::find(given).await?;
     let out = std::fs::OpenOptions::new().create(true).append(true).open(log).map_err(failed)?;
     let err = out.try_clone().map_err(failed)?;
-    let mut command = Command::new("bash");
+    let mut command = Command::new(bash);
     command
         .args(["-c", script])
         .current_dir(worktree)
@@ -320,6 +337,20 @@ mod tests {
         assert!(text.contains("out alder"), "{text}");
         assert!(text.contains("err"), "{text}");
         assert!(text.contains(dir.path().file_name().unwrap().to_str().unwrap()), "{text}");
+    }
+
+    /// Here because its worktree has gone, as a script on Windows can't run without Git for Windows' `bash` either.
+    #[tokio::test]
+    async fn a_script_that_cant_run_says_why_in_its_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("setup.log");
+
+        let ran = run_script(&given(), "true", &dir.path().join("gone"), &[], &log, |_| {}).await;
+
+        let error = ran.unwrap_err();
+        assert_eq!(error.code, ErrorCode::Worker);
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(text.contains(&error.message), "{text}");
     }
 
     #[test]

@@ -32,6 +32,7 @@ What differs from the Mac:
 - There's no dictation.
 - The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
 - The menus open from the first button in the window's top left corner, or `F10`. Settings… and Exit are in File, and About Roundhouse and Check for Updates… in Help.
+- A repository's setup and archive scripts run in Git for Windows' `bash`, which its installer puts beside `git`.
 
 ## On Linux
 

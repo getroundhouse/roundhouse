@@ -35,6 +35,8 @@ use worktrees::{Changing, Hold, Worktrees, held};
 
 mod commands;
 
+#[cfg(windows)]
+pub(crate) use commands::exec_path;
 pub(crate) use commands::list_nul_separated;
 pub(crate) use commands::version;
 use commands::{

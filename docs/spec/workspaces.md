@@ -158,6 +158,7 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **A Claude agent on the machine's own login gets whatever Claude login settings the profile or what started the hub sets, such as `ANTHROPIC_API_KEY`, the Bedrock and Vertex settings, `ANTHROPIC_BASE_URL` and `CLAUDE_CODE_OAUTH_TOKEN`, and one on an account connected in Settings gets none that would outrank its login,** as `gh` gets the person's `GH_TOKEN` unless the hub holds a GitHub login. So with no account connected, an agent uses a key the profile exports, and bills it. Someone who wants agents on their subscription connects it as an account and makes it the default. The owner decided this on 2026-11-22, in place of keeping these settings from every agent.
 - **When the login shell fails, or says nothing within 5 seconds, a workspace has what the hub was started with,** with the login shell's `PATH` first if it could say that much, and the hub's log says why. *Unconfirmed.*
 - **On Windows, which has no login shell, a workspace has what the hub was started with.** *Unconfirmed.*
+- **On Windows, a workspace's setup and archive scripts run in Git for Windows' `bash`, the one installed with the `git` the workspace runs,** whatever comes first on `PATH`, since scripts written for a repository on Windows are written for it. Windows would otherwise find WSL's `bash` first, which runs a script in Linux without the workspace's variables. Where that `git` has no `bash`, as MinGit has none, the script fails, and its log says why. *Unconfirmed.*
 
 ## Archiving
 
