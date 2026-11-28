@@ -22,7 +22,7 @@ use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 pub use protocol::provider::{
     Capabilities, ClonePersistence, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary,
-    WorkerEnvironment, WorkerFilesystem,
+    WorkerEnvironment, WorkerFilesystem, WorkerLiveness,
 };
 
 /// The command the hub runs to reach one of the local provider's workers, whose stdin and stdout are its stream.
@@ -97,6 +97,13 @@ pub trait Provider: Send + Sync {
     /// local workers listened instead.
     async fn workers_running(&self) -> Result<Vec<InstanceId>, ProviderError> {
         Err(ProviderError::Unsupported("say which workers run but by their dialing the hub"))
+    }
+    /// Whether the instance's worker is still running, as the hub that has just started asks of a worker an earlier hub
+    /// left, which hasn't dialed it. [`WorkerLiveness::Gone`] only when the provider is sure no worker runs there, since
+    /// the hub then ends what's left and starts afresh. Anything it can't be sure of is `Unknown`, which is also what a
+    /// provider that can't tell answers, with `Unsupported`, as the hub takes it. The hub gives the ask a time limit.
+    async fn worker_state(&self, _instance_id: &InstanceId) -> Result<WorkerLiveness, ProviderError> {
+        Err(ProviderError::Unsupported("say whether a worker runs"))
     }
     /// Opens a stream to run preflight in the prospective launch environment.
     async fn open_preflight(&self, _launch: &OpenPreflight) -> Result<protocol::provider::Command, ProviderError> {

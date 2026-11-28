@@ -53,6 +53,13 @@ impl Provider for Fake {
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
         Ok(vec![Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false }])
     }
+    /// Says the one worker it has is gone, and that it can't say of any other.
+    async fn worker_state(&self, id: &InstanceId) -> Result<crate::WorkerLiveness, ProviderError> {
+        if id.as_str() == "i" {
+            return Ok(crate::WorkerLiveness::Gone);
+        }
+        Err(ProviderError::Unsupported("say whether a worker runs"))
+    }
     async fn make_base_image(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Err(ProviderError::Unsupported("make one in a test"))
     }
@@ -151,6 +158,20 @@ async fn answers_carry_the_providers_errors_and_refuse_what_a_newer_hub_asks() {
     hub.send(json!({"id": 2, "request": {"method": "resize", "instance_id": "i"}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "unsupported");
     hub.send(json!({"id": 3, "request": {"method": "make_base_image", "instance_id": "i"}})).await;
+    assert_eq!(hub.reply().await["error"]["code"], "unsupported");
+}
+
+/// A request an adapter doesn't answer is `Unsupported`, which the hub reads as the worker's state being unknown.
+#[tokio::test]
+async fn an_adapter_says_whether_a_worker_is_gone_or_that_it_cant() {
+    let mut hub = serving(Arc::default());
+    hub.hello("h").await;
+    hub.send(json!({"id": 1, "request": {"method": "worker_state", "instance_id": "i"}})).await;
+    assert_eq!(
+        hub.reply().await,
+        json!({"frame": "reply", "id": 1, "response": {"result": "worker_state", "state": "gone"}})
+    );
+    hub.send(json!({"id": 2, "request": {"method": "worker_state", "instance_id": "other"}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "unsupported");
 }
 

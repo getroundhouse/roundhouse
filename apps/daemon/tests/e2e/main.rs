@@ -84,6 +84,7 @@ mod tool_server_saves;
 mod tool_servers;
 #[cfg(unix)]
 mod tools;
+mod worker_state;
 mod worker_versions;
 #[cfg(unix)]
 mod workspace_lines;

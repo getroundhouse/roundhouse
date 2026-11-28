@@ -4,7 +4,9 @@ use crate::model::InstanceId;
 use hello::{Hello, HelloReply};
 #[cfg(test)]
 use instances::{Command, List};
-use instances::{Create, Destroy, EndWorker, Instances, KillWorker, MakeBaseImage, Start};
+use instances::{
+    Create, Destroy, EndWorker, Instances, KillWorker, MakeBaseImage, Start, WorkerState, WorkerStateReply,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -66,6 +68,7 @@ pub enum ProviderRequest {
     List,
     OpenPreflight(super::OpenPreflight),
     MakeBaseImage(MakeBaseImage),
+    WorkerState(WorkerState),
     /// A request from a newer hub, which the adapter refuses with `Unsupported`.
     #[serde(other)]
     Unknown,
@@ -79,6 +82,7 @@ pub enum ProviderResponse {
     Ok,
     Instances(Instances),
     Command(instances::Command),
+    WorkerState(WorkerStateReply),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

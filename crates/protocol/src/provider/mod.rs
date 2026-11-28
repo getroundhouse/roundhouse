@@ -19,7 +19,7 @@ pub use preflight::OpenPreflight;
 pub use hello::{Capabilities, ClonePersistence, Feature, Hello, HelloReply, WorkerEnvironment, WorkerFilesystem};
 pub use instances::{
     Command, Create, Destroy, EndWorker, Instance, InstanceState, Instances, KillWorker, List, MakeBaseImage, Size,
-    Start, WorkerBinary,
+    Start, WorkerBinary, WorkerLiveness, WorkerState, WorkerStateReply,
 };
 
 mod messages;
