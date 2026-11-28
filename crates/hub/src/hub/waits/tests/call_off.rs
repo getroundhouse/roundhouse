@@ -83,8 +83,8 @@ async fn a_wait_that_ends_with_nobody_to_hear_until_the_next_prompt_comes_off_th
 
     pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
-    // Once the wake is done, since a chat carries out what it's asked in turn.
-    let _ = hub.session_cancel("s".into()).await;
+    // Once the wake is done.
+    session.delivered().await;
 
     let left = hub.store.get_session(&"s".into()).unwrap().session;
     assert_eq!((at_rest(&left), left.queue_held, session.agent_running()), ((SessionStatus::Idle, 0), true, false));

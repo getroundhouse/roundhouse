@@ -12,6 +12,7 @@ use protocol::model::{ContextUsage, RunId, Seq, SessionStatus};
 
 mod account_moves;
 mod cache;
+mod carrying_on;
 mod chat_settings;
 mod commands;
 mod configuring;

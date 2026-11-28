@@ -80,3 +80,52 @@ async fn a_chat_with_an_idle_agent_on_a_dropped_connection_records_its_loss_once
 
     assert_eq!((told.len(), told_again.len(), lost(&hub)), (1, 0, 1));
 }
+
+/// A prompt waiting for setup to end holds up the next from being recorded and answered, and a prompt queued meanwhile
+/// is answered at once too. Both sent reach the agent in the order they were sent once setup has ended.
+#[tokio::test]
+async fn a_prompt_waiting_for_setup_holds_up_neither_the_next_prompt_nor_a_queued_one() {
+    use crate::hub::setup::SetupGate;
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_with_stand_in_workers(dir.path());
+    let (workspace, chat) = a_chat(&hub).await;
+    waiting::task::until(TIMEOUT, "the first setup to finish", || hub.setup_gates.lock().is_empty()).await;
+    hub.setup_gates.lock().insert(workspace.id.clone(), SetupGate::running());
+    let sent = |text: &'static str| hub.session_prompt(chat.id.clone(), None, Prompt::new(text), None);
+
+    let quickly = Duration::from_secs(2);
+    let first = tokio::time::timeout(quickly, sent("first")).await.expect("the first prompt was answered");
+    let second = tokio::time::timeout(quickly, sent("second")).await.expect("the second prompt was answered");
+    let queued =
+        tokio::time::timeout(quickly, hub.session_queue(chat.id.clone(), "q".into(), Prompt::new("later"), None)).await;
+
+    let (first, second) = (first.unwrap().0, second.unwrap().0);
+    assert!(queued.is_ok(), "a queued prompt was answered");
+    let recorded = log(&hub, &chat.id).iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).count();
+    assert_eq!(recorded, 2);
+    assert!(asked.prompts_given(&chat.id).is_empty(), "nothing is given while setup runs");
+    hub.setup_gates.lock().remove(&workspace.id);
+    waiting::task::until(TIMEOUT, "both prompts to be given", || asked.prompts_given(&chat.id).len() == 2).await;
+    assert_eq!(asked.prompts_given(&chat.id), [first, second], "in the order they were sent");
+}
+
+/// The same while the worker is disconnected.
+#[tokio::test]
+async fn prompts_sent_while_the_worker_is_disconnected_are_each_recorded_at_once_and_reach_the_agent_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_with_stand_in_workers(dir.path());
+    let (workspace, chat) = a_chat(&hub).await;
+    waiting::task::until(TIMEOUT, "the first setup to finish", || hub.setup_gates.lock().is_empty()).await;
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true, None);
+    let sent = |text: &'static str| hub.session_prompt(chat.id.clone(), None, Prompt::new(text), None);
+
+    let quickly = Duration::from_secs(2);
+    let first = tokio::time::timeout(quickly, sent("first")).await.expect("the first prompt was answered");
+    let second = tokio::time::timeout(quickly, sent("second")).await.expect("the second prompt was answered");
+
+    let (first, second) = (first.unwrap().0, second.unwrap().0);
+    assert!(asked.prompts_given(&chat.id).is_empty());
+    hub.disconnected.clear(&workspace.id);
+    waiting::task::until(TIMEOUT, "both prompts to be given", || asked.prompts_given(&chat.id).len() == 2).await;
+    assert_eq!(asked.prompts_given(&chat.id), [first, second]);
+}

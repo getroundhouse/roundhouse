@@ -76,6 +76,17 @@ pub(crate) struct CarriedOver {
     pub untaken: Vec<Seq>,
 }
 
+impl CarriedOver {
+    /// Its agent's run, what the session recorded of it, and the prompts it hadn't taken, or none of them for a session
+    /// with no agent to carry on with.
+    fn parts(carried: Option<Self>) -> (Option<AgentRun>, Option<(RunId, u64)>, Vec<Seq>) {
+        match carried {
+            Some(Self { link, run, recorded, untaken }) => (Some(AgentRun { link, run }), recorded, untaken),
+            None => (None, None, Vec::new()),
+        }
+    }
+}
+
 pub(super) struct LiveState {
     pub(super) last_seq: Seq,
     /// Where the agent has got to, as the session's record says, which only recording an event changes.
@@ -119,6 +130,9 @@ pub(super) struct LiveState {
     /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
     /// loses them, and they stay untaken.
     pub(super) after_the_turn: Vec<Sendable>,
+    /// The newest prompt, or request to compact, handed to the agent, or kept for the turn's end. The untaken ones past
+    /// it are still in the line, as [`super::commands`]'s delivery task says, so they start no turn.
+    pub(super) handed_through: Option<Seq>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
     pub(super) live: Option<broadcast::Sender<Live>>,
@@ -134,6 +148,10 @@ pub(crate) struct LiveSession {
     /// The hub's [`crate::Timers::picks_up_within`], copied as the session starts, since it holds the hub weakly.
     pub(super) picks_up_within: Duration,
     pub(super) commands: mpsc::Sender<Command>,
+    /// What the command task hands on for the delivery task to get to the agent, as [`commands::Outgoing`] says.
+    pub(super) outgoing: mpsc::UnboundedSender<commands::Outgoing>,
+    /// Set once the session has ended, which stops the tasks that wait on the worker.
+    pub(super) ended: tokio::sync::watch::Sender<bool>,
     pub(super) ingest: mpsc::Sender<Item>,
     pub(super) state: Mutex<LiveState>,
     /// Held while the session's record changes and is announced, by an event being recorded or by filing which account
@@ -169,10 +187,9 @@ impl LiveSession {
     pub(crate) fn start(hub: &Arc<Hub>, starting: Starting, carried: Option<CarriedOver>) -> Arc<Self> {
         let Starting { stored, open_approvals, failing } = starting;
         let has_queue = !stored.session.queued.is_empty();
-        let (agent, recorded, untaken) = match carried {
-            Some(CarriedOver { link, run, recorded, untaken }) => (Some(AgentRun { link, run }), recorded, untaken),
-            None => (None, None, Vec::new()),
-        };
+        let (agent, recorded, untaken) = CarriedOver::parts(carried);
+        // What an earlier hub left untaken was handed to its agent, which may take it yet.
+        let handed_through = untaken.last().copied();
         // The agent still running is the one that asked whatever is open, and runs on what it runs in the background.
         let asked_by = agent.map(|agent| agent.run);
         // What's in the background is as the record lists it: the agent's, if it carries on with one, or else only a
@@ -180,6 +197,7 @@ impl LiveSession {
         let progress = Progress::recorded(&stored.session, &open_approvals, asked_by, untaken, failing);
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
+        let (outgoing_tx, outgoing_rx) = mpsc::unbounded_channel();
         let session = Arc::new(LiveSession {
             id: stored.session.id.clone(),
             workspace_id: stored.session.workspace_id.clone(),
@@ -188,6 +206,8 @@ impl LiveSession {
             hub: Arc::downgrade(hub),
             picks_up_within: hub.timers.picks_up_within,
             commands: commands_tx,
+            outgoing: outgoing_tx,
+            ended: tokio::sync::watch::channel(false).0,
             ingest: ingest_tx,
             state: Mutex::new(LiveState {
                 last_seq: stored.session.last_seq,
@@ -211,6 +231,7 @@ impl LiveSession {
                 reloading: None,
                 mode_told: None,
                 after_the_turn: Vec::new(),
+                handed_through,
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
@@ -218,8 +239,7 @@ impl LiveSession {
             configuring: tokio::sync::Mutex::new(()),
             settling: tokio::sync::Mutex::new(()),
         });
-        tokio::spawn(run_commands(session.clone(), commands_rx).instrument(session.span()));
-        tokio::spawn(run_ingest(session.clone(), ingest_rx).instrument(session.span()));
+        session.spawn_tasks(commands_rx, outgoing_rx, ingest_rx);
         if let Some(agent) = agent {
             session.carried_on(agent.run);
         }
@@ -230,55 +250,22 @@ impl LiveSession {
         session
     }
 
-    /// Has a session that was made before its agent's worker dialed the hub carry on with `carried`, as one made after
-    /// does, as a workspace whose worker dialed late has each of its sessions do. A client could have followed the
-    /// session meanwhile, which makes it, with no agent, and what it recorded since is what the agent finds. One whose
-    /// agent is on a worker that has dialed again has it go on over the new connection. The
-    /// `capabilities` are what the session's record says its run claims now. Does
-    /// nothing to one that has an agent already.
-    pub(crate) fn carry_on_with(
+    /// Starts the session's three tasks: the one that records what it's asked, the one that gets what's recorded to its
+    /// agent, and the one that takes in what its agent says.
+    fn spawn_tasks(
         self: &Arc<Self>,
-        carried: CarriedOver,
-        capabilities: Option<protocol::model::RunCapabilities>,
+        commands: mpsc::Receiver<Command>,
+        outgoing: mpsc::UnboundedReceiver<commands::Outgoing>,
+        ingest: mpsc::Receiver<Item>,
     ) {
-        let CarriedOver { link, run, recorded, untaken } = carried;
-        {
-            let mut state = self.state.lock();
-            if let Some(agent) = &mut state.agent {
-                // Its worker dialed again after its connection dropped, so the same run is on a new link, which is the
-                // one its events come on from now. A run that's another is one this session has moved on to.
-                let rebound = agent.run == run && agent.link != link;
-                if rebound {
-                    agent.link = link;
-                }
-                drop(state);
-                if rebound {
-                    self.ask_for_reconnects();
-                }
-                return;
-            }
-            state.agent = Some(AgentRun { link, run });
-            state.capabilities = capabilities;
-            state.recorded = recorded;
-            state.had_servers = Some(HadServers::new(run, ServersAsSent::default()));
-            for asked_by in state.progress.approvals.values_mut() {
-                asked_by.get_or_insert(run);
-            }
-            state.progress.queue.set_untaken(untaken);
-        }
-        self.carried_on(run);
+        tokio::spawn(run_commands(self.clone(), commands).instrument(self.span()));
+        tokio::spawn(commands::run_delivery(self.clone(), outgoing).instrument(self.span()));
+        tokio::spawn(run_ingest(self.clone(), ingest).instrument(self.span()));
     }
 
-    /// Does for `run`, which an earlier hub left running, what the last hub may not have.
-    fn carried_on(self: &Arc<Self>, run: RunId) {
-        // So what the agent hears of its account's limits is filed under the account, as for one this hub launched.
-        self.launched(run);
-        // A tool server may have been signed in to or edited as the last hub went.
-        self.ask_for_reconnects();
-        // The last hub's wait for the agent to pick up again went with it.
-        if self.state.lock().progress.waits_for_pickup() {
-            self.wait_for_pickup();
-        }
+    /// Returns once the session has ended.
+    pub(super) async fn until_ended(&self) {
+        let _ = self.ended.subscribe().wait_for(|ended| *ended).await;
     }
 
     pub(super) fn hub(&self) -> Result<Arc<Hub>, ApiError> {
@@ -292,6 +279,7 @@ impl LiveSession {
     /// Lets go of a session that's been deleted. Its two tasks each hold it, and so does everyone following it, so
     /// both tasks stop, and every follower does once what it waits on is gone.
     pub(crate) async fn end(&self) {
+        self.ended.send_replace(true);
         self.state.lock().live = None;
         let _ = self.command(Command::End).await;
         self.send_item(Item::End).await;

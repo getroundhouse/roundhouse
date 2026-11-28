@@ -113,24 +113,3 @@ pub(crate) enum Command {
     /// The session is gone. What's queued ahead of this is carried out, and then the task stops.
     End,
 }
-
-impl Command {
-    /// Whether it may have the agent start a turn, as a prompt does, so whatever waits for it to be on none comes first.
-    pub(super) fn may_start_a_turn(&self) -> bool {
-        match self {
-            Command::Prompt { .. }
-            | Command::Compact { .. }
-            | Command::SendQueued
-            | Command::SendQueuedNow { .. }
-            | Command::SendAfterTheTurn => true,
-            Command::Decide { .. }
-            | Command::Cancel { .. }
-            | Command::ReloadToolServer { .. }
-            | Command::Stop { .. }
-            | Command::WakeAgent
-            | Command::TellTheMode
-            | Command::ReconnectToolServers
-            | Command::End => false,
-        }
-    }
-}

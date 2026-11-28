@@ -136,8 +136,8 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
 
         pull_requests.set(7, PullRequestState::Merged);
         hub.workspace_pull_request("w".into()).await.unwrap();
-        // Once the wake is done, since a chat carries out what it's asked in turn.
-        let _ = hub.session_cancel("s".into()).await;
+        // Once the wake is done.
+        hub.live_session(&"s".into()).await.unwrap().delivered().await;
 
         assert_eq!(*starts.lock(), usize::from(woken), "{status:?}, held: {queue_held}");
         let events = hub.store.read_events(&"s".into(), Seq::new(1), 100, u64::MAX, false).unwrap();

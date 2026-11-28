@@ -9,17 +9,17 @@ use protocol::model::{Seq, SessionStatus};
 use tokio::sync::oneshot;
 
 use super::super::{LiveSession, LiveState, Origin};
-use super::Asking;
+use super::Outgoing;
 use crate::hub::Hub;
 
 impl LiveSession {
     /// Records that someone asked the agent to compact, and asks it, unless [`refused_compaction`] says it can't be.
     pub(super) async fn handle_compact(&self, keeping: Option<String>, reply: oneshot::Sender<Result<(), ApiError>>) {
         let recorded = match self.hub() {
-            Ok(hub) => self.record_compaction(&hub, keeping).await.map(|event| (hub, event)),
+            Ok(hub) => self.record_compaction(&hub, keeping).await,
             Err(e) => Err(e),
         };
-        let (hub, (seq, keeping)) = match recorded {
+        let seq = match recorded {
             Ok(recorded) => recorded,
             Err(e) => {
                 let _ = reply.send(Err(e));
@@ -27,20 +27,20 @@ impl LiveSession {
             }
         };
         let _ = reply.send(Ok(()));
-        self.deliver(&hub, seq, Asking::Compact { keeping }).await;
+        self.hand_over(Outgoing::Deliver { seq });
     }
 
-    /// Where the request is recorded, and what it says to keep.
-    async fn record_compaction(&self, hub: &Hub, keeping: Option<String>) -> Result<(Seq, Option<String>), ApiError> {
+    /// Where the request is recorded.
+    async fn record_compaction(&self, hub: &Hub, keeping: Option<String>) -> Result<Seq, ApiError> {
         self.can_be_asked(hub).await?;
         let claims = self.run_claims().or_else(|| hub.agent(self.agent).ok().map(|kind| kind.capabilities.clone()));
         let keeping = to_keep(keeping.as_deref(), claims.as_ref());
-        let asked = EventBody::CompactionAsked { keeping: keeping.clone() };
+        let asked = EventBody::CompactionAsked { keeping };
         let refused = |state: &LiveState| {
             refused_compaction(state.progress.status, state.progress.queue.idle_is_stale(), state.agent_opened)
         };
         let (event, _) = self.record_unless(Origin::Hub, asked, None, refused).await?;
-        Ok((event.seq, keeping))
+        Ok(event.seq)
     }
 }
 

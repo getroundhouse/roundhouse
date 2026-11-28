@@ -3,6 +3,7 @@ use super::super::conversation::Sending;
 use super::super::decisions::refusal;
 use super::super::record::Admitted;
 use super::super::{Command, LiveSession, LiveState, Origin};
+use super::Outgoing;
 use super::after_the_turn::Sendable;
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
@@ -32,10 +33,6 @@ pub(super) enum Sent {
 
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
-        // Here too, since one can be asked for as a turn ends, ahead of what its end asks for.
-        if command.may_start_a_turn() {
-            session.reconnect_tool_servers().await;
-        }
         match command {
             Command::Prompt { client_msg_id, prompt, device, reply } => {
                 session.handle_prompt(client_msg_id, prompt, device, reply).await;
@@ -43,22 +40,20 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             Command::Decide { approval_id, decision, reply } => {
                 let _ = reply.send(session.handle_decide(approval_id, decision).await);
             }
-            Command::Cancel { reply } => {
-                let _ = reply.send(session.handle_cancel().await);
-            }
+            // After what was handed on before it, as they were when the command task did it all.
+            Command::Cancel { reply } => session.hand_over(Outgoing::Cancel(reply)),
             Command::Compact { keeping, reply } => session.handle_compact(keeping, reply).await,
             Command::ReloadToolServer { server, reply } => {
                 let _ = reply.send(session.reload_tool_server(&server).await);
             }
-            Command::Stop { reply } => {
-                let _ = reply.send(session.handle_stop().await);
-            }
+            Command::Stop { reply } => session.hand_over(Outgoing::Stop(reply)),
             Command::SendQueued => session.send_queued().await,
             Command::SendQueuedNow { client_msg_id, reply } => session.send_queued_now(client_msg_id, reply).await,
-            Command::WakeAgent => session.handle_wake_agent().await,
-            Command::TellTheMode => session.tell_the_mode().await,
-            Command::ReconnectToolServers => session.reconnect_tool_servers().await,
-            Command::SendAfterTheTurn => session.after_the_turn().await,
+            // What reaches the agent is the delivery task's, after whatever was handed on before it.
+            Command::WakeAgent => session.hand_over(Outgoing::WakeAgent),
+            Command::TellTheMode => session.hand_over(Outgoing::TellTheMode),
+            Command::ReconnectToolServers => session.hand_over(Outgoing::ReconnectToolServers),
+            Command::SendAfterTheTurn => session.hand_over(Outgoing::AfterTheTurn),
             Command::End => break,
         }
     }
@@ -200,22 +195,16 @@ impl LiveSession {
         // Recorded, so the prompt is real and the client can stop retrying. From here, failures are
         // reported in the log, where every client can see them.
         let _ = reply.send(Ok((seq, prompt.is_none())));
-        if let Some(prompt) = prompt {
-            self.deliver_prompt(&hub, seq, prompt).await;
+        if prompt.is_some() {
+            self.hand_over(Outgoing::Deliver { seq });
         }
     }
 
-    pub(in super::super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, prompt: Prompt<Attachment>) {
-        self.deliver(hub, seq, Asking::Prompt(prompt)).await;
-    }
-
     /// Gets what was recorded at `seq` to the agent, starting one if it has to. Failures go in the log, and so does
-    /// what never reaches an agent, since no agent will say so.
+    /// what never reaches an agent, since no agent will say so. Only the delivery task does, once setup has ended and
+    /// the worker is connected.
     pub(super) async fn deliver(&self, hub: &Hub, seq: Seq, asking: Asking) {
         let dropped = EventBody::PromptDropped { prompt: seq };
-        hub.wait_for_setup(&self.workspace_id).await;
-        // A worker whose connection dropped is waited for, and the prompt, recorded, reaches its agent once it's back.
-        hub.wait_until_connected(&self.workspace_id).await;
         if self.is_closed() {
             return self.record_or_log(Origin::Hub, dropped).await;
         }

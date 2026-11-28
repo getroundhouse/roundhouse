@@ -1,8 +1,8 @@
+use super::super::commands::Outgoing;
 use super::super::conversation::{Sending, has_the_conversation};
 use super::super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
 use crate::store::{Changed, Queuing, Reading, Store, StoreError, Unqueued};
-use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::{AttachmentId, ClientDevice, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
@@ -13,7 +13,7 @@ use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 /// A recorded prompt to get to the agent, and where it's recorded.
-type Delivery = (Seq, Prompt<Attachment>);
+type Delivery = Seq;
 
 /// What the log says about whether the agent can take a queued prompt as a turn of its own.
 #[derive(Debug, Default)]
@@ -229,8 +229,8 @@ impl LiveSession {
                 }
             }
         };
-        if let Some((seq, prompt)) = to_deliver {
-            self.deliver_prompt(&hub, seq, prompt).await;
+        if let Some(seq) = to_deliver {
+            self.hand_over(Outgoing::Deliver { seq });
         }
     }
 
@@ -267,8 +267,8 @@ impl LiveSession {
         };
         let id = self.id.clone();
         let _ = reply.send(hub.blocking(move |store| store.get_session(&id)).await.map(|stored| stored.session));
-        if let Some((seq, prompt)) = to_deliver {
-            self.deliver_prompt(&hub, seq, prompt).await;
+        if let Some(seq) = to_deliver {
+            self.hand_over(Outgoing::Deliver { seq });
         }
     }
 
@@ -295,7 +295,7 @@ impl LiveSession {
     ) -> Result<Option<Delivery>, ApiError> {
         let QueuedPrompt { client_msg_id, prompt, from } = prompt;
         let (seq, prompt) = self.record_carrying(hub, Some(client_msg_id), prompt, from, Sending::Queued).await?;
-        Ok(prompt.map(|prompt| (seq, prompt)))
+        Ok(prompt.map(|_| seq))
     }
 
     /// Tells everyone following the feed, if the queue changed.

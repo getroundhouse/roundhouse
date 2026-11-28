@@ -34,8 +34,8 @@ async fn a_chat_whose_prompt_its_running_agent_never_had_isnt_left_at_work() {
     serving(&hub, &link);
 
     hub.session_prompt("s".into(), None, protocol::prompt::Prompt::new("x"), None).await.unwrap();
-    // Once the prompt's delivery is done, since a chat carries out what it's asked in turn.
-    let _ = hub.session_cancel("s".into()).await;
+    // Once the prompt's delivery is done.
+    hub.live_session(&"s".into()).await.unwrap().delivered().await;
 
     let id = SessionId::from("s");
     let session = hub.blocking(move |store| store.get_session(&id)).await.unwrap().session;
