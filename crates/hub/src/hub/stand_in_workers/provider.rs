@@ -14,7 +14,8 @@ use protocol::worker::{
     SetupDone, ToolsServing, WorkerRequest, WorkerResponse, WorkspaceReady,
 };
 use providers::{
-    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment, WorkerReach,
+    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
+    WorkerLiveness, WorkerReach,
 };
 
 use super::super::Hub;
@@ -65,6 +66,9 @@ pub(in super::super) struct Asked {
     destroys: AtomicUsize,
     fail_environment: AtomicBool,
     fail_destroy: AtomicBool,
+    state_asks: AtomicUsize,
+    /// What the provider says of a worker, or that it can't, which is `None`.
+    state_answer: Mutex<Option<WorkerLiveness>>,
     on_destroy: Mutex<Option<DestroyHook>>,
 }
 
@@ -95,6 +99,16 @@ impl Asked {
     /// the provider's adapter.
     pub(in super::super) fn fail_environment_reads(&self) {
         self.fail_environment.store(true, Ordering::SeqCst);
+    }
+
+    /// How often the provider was asked whether a worker is running.
+    pub(in super::super) fn state_asks(&self) -> usize {
+        self.state_asks.load(Ordering::SeqCst)
+    }
+
+    /// Has the provider say a worker is `state` from now on, rather than that it can't say.
+    pub(in super::super) fn say_workers_are(&self, state: WorkerLiveness) {
+        *self.state_answer.lock() = Some(state);
     }
 
     /// Controls whether subsequent `Provider::destroy` calls fail.
@@ -268,6 +282,12 @@ impl Provider for WithWorkers {
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
         Ok(Vec::new())
+    }
+
+    /// As a test has it say, or that it can't.
+    async fn worker_state(&self, _: &InstanceId) -> Result<WorkerLiveness, ProviderError> {
+        self.asked.state_asks.fetch_add(1, Ordering::SeqCst);
+        (*self.asked.state_answer.lock()).ok_or(ProviderError::Unsupported("say whether a worker runs"))
     }
 
     /// Refused, since a stand-in has no command to reach it by: once one has gone, its workspace has no worker.

@@ -22,13 +22,17 @@ fn hub_logged(stack: &Stack, event: &str) -> usize {
 fn a_worker_killed_while_the_hub_runs_is_found_gone_and_the_next_prompt_gets_a_new_one() {
     let stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace(&client);
+    let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first; hang", None).unwrap();
     wait_until("the agent to start", || started_pid(&read_all(&client, &session.id)).is_some());
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
 
     Stack::kill_worker(stack.worker_pid());
 
+    // Once the hub has lost it, a request for a worker isn't refused for want of its provider having been asked: the worker
+    // is gone, and a new one is made.
+    wait_until("the hub to have lost the worker", || client.hub_status().unwrap().workers == 0);
+    client.workspace_status(&workspace.id).unwrap();
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);
     let events = read_all(&client, &session.id);
     let lost = |e: &protocol::event::SessionEvent| {

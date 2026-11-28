@@ -37,7 +37,7 @@ impl LeftAtWork {
     }
 }
 
-/// What became of the worker an earlier hub left in a workspace.
+/// What became of a workspace's worker that the hub couldn't reach.
 #[derive(PartialEq, Eq)]
 pub(super) enum Carried {
     /// Its sessions were carried on with its agents, or interrupted if it couldn't be reached or has gone.
@@ -165,13 +165,27 @@ impl Hub {
                 %workspace_id,
                 "The worker an earlier hub left hasn't dialed this one, so it's waited for"
             );
-            self.disconnected.mark(&workspace_id, Cause::LeftByEarlierHub);
-            let span = spans::workspace(&workspace_id);
-            tokio::spawn(self.clone().wait_for_worker(workspace_id).instrument(span));
+            // Its provider was asked as the hub waited, and didn't say it's gone, so nothing waits for that to be known.
+            match self.workspace(&workspace_id).await {
+                Ok(workspace) => {
+                    self.disconnected.mark(&workspace_id, &workspace.instance_id, Cause::LeftByEarlierHub, true);
+                    let span = spans::workspace(&workspace_id);
+                    tokio::spawn(self.clone().wait_for_worker(workspace_id).instrument(span));
+                }
+                Err(e) => {
+                    warn!(
+                        name: "recovery.workspace_unread",
+                        %workspace_id,
+                        error = e.message,
+                        "Couldn't read a workspace whose worker hasn't dialed, so it isn't waited for"
+                    );
+                }
+            }
         }
     }
 
-    /// What's left at work in the workspace, carried on with or recovered, or left for its worker to dial.
+    /// What's left at work in the workspace, whether an earlier hub left it or its worker's connection dropped, carried
+    /// on with or recovered, or left for its worker to dial.
     pub(super) async fn carry_on_workspace(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
@@ -188,7 +202,7 @@ impl Hub {
                     name: "recovery.worker_unreached",
                     %workspace_id,
                     error = e.message,
-                    "The worker an earlier hub left couldn't be reached"
+                    "The worker couldn't be reached, so its sessions are interrupted"
                 );
                 for id in at_work {
                     let prompts = take(&id);
@@ -231,7 +245,7 @@ impl Hub {
             agents,
             terminals,
             build,
-            "Connected again to the worker an earlier hub left"
+            "Connected again to the worker"
         );
         self.clone().keep_or_end(workspace_id.clone(), link, terminals > 0, being_moved).await;
         Carried::Done

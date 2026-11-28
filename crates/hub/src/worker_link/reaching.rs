@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 use super::carrier::Carrier;
 use crate::child_process::{self, Spawned, Stderr};
 use crate::error::provider_failed;
-use crate::hub::Hub;
+use crate::hub::{Asked, Hub, NextAsk};
 use crate::worker_dial::{Dialed, Endpoint};
 
 /// The worker a link is opened to.
@@ -25,11 +25,7 @@ pub(crate) enum Opening {
     /// reach it, and then again and again while its workspace is disconnected. What it sends is held until
     /// [`WorkerLink::release`], so the hub can say first which agent each session has, and what the worker sends again
     /// of what the earlier hub missed is taken for that agent's.
-    LeftRunning {
-        /// How long its workspace has been disconnected, if it is, which paces how often its provider is asked whether
-        /// it's gone: often at first, since a worker that has just died can read as running for a moment, then seldom.
-        disconnected_for: Option<Duration>,
-    },
+    LeftRunning,
 }
 
 /// A worker's stream, and what carries it.
@@ -108,16 +104,14 @@ async fn dialed(
             provider.start(instance_id, workers, Some(&ticket)).await.map_err(|e| provider_failed(&e))?;
             provider.starts_or_stops_within()
         }
-        Opening::LeftRunning { .. } => {
+        Opening::LeftRunning => {
             hub.dial.listen(endpoint).await?;
             hub.timers.before_serving
         }
     };
     let dialed = match opening {
         Opening::Started => hub.dial.worker(instance_id, within).await,
-        Opening::LeftRunning { disconnected_for } => {
-            dial_unless_gone(hub, provider, instance_id, within, disconnected_for).await?
-        }
+        Opening::LeftRunning => dial_unless_gone(hub, provider, instance_id, within).await?,
     }
     .ok_or_else(|| didnt_dial(within, opening))?;
     Ok(Reached {
@@ -127,53 +121,71 @@ async fn dialed(
     })
 }
 
-/// How often the hub asks again whether a worker that hasn't dialed is gone. One that has just died can still read as
-/// running for a moment, since the system lets go of its claim only as the last of its threads exits.
+/// How often the hub asks again whether a worker that hasn't dialed is gone, where nothing yet says how long it's been
+/// disconnected, as for a hub that's starting. One that has just died can still read as running for a moment, since the
+/// system lets go of its claim only as the last of its threads exits.
 const ASK_AGAIN_EVERY: Duration = Duration::from_millis(250);
-/// The longest between asks of a provider about a worker that has been disconnected for a long while, which an adapter
-/// that can be asked costs a request each of.
-const ASK_AGAIN_AT_MOST: Duration = Duration::from_secs(30);
 
-/// The connection a worker an earlier hub left dials, if it does within `within`, or an error as soon as its provider
+/// The connection a worker that isn't connected dials, if it does within `within`, or an error as soon as its provider
 /// says it's gone, since a worker that's gone can't dial, and waiting out `within` for one would hold up every client
 /// of the hub that's starting. Anything else the provider answers, or fails to within `within`, is no reason to stop
-/// waiting: only proof is. A provider that can't say is asked no more.
-async fn dial_unless_gone(
+/// waiting: only proof is.
+///
+/// How often the provider is asked is the workspace's [`Disconnected`](crate::hub::Disconnected) entry's to say, not
+/// this wait's, which is made again every `within` for as long as the worker doesn't dial: so a worker that's been
+/// disconnected a long while is asked after seldom however often this is called, and a provider that said it can't
+/// tell isn't asked again. Where there's no entry, as for a hub that's starting, it's asked every [`ASK_AGAIN_EVERY`].
+pub(crate) async fn dial_unless_gone(
     hub: &Hub,
     provider: &dyn Provider,
     instance_id: &InstanceId,
     within: Duration,
-    disconnected_for: Option<Duration>,
 ) -> Result<Option<Dialed>, ApiError> {
-    // The first ask follows at once, the next as the time since the workspace was disconnected grows, up to the longest.
-    let pace = disconnected_for.map_or(ASK_AGAIN_EVERY, |gone| (gone / 8).clamp(ASK_AGAIN_EVERY, ASK_AGAIN_AT_MOST));
     let gone = async {
         loop {
+            let (entry, due) = match hub.disconnected.next_ask(instance_id) {
+                Some(NextAsk::Never) => break,
+                Some(NextAsk::In(wait)) => (true, wait),
+                Some(NextAsk::Now) => (true, Duration::ZERO),
+                None => (false, Duration::ZERO),
+            };
+            if !due.is_zero() {
+                pause(due).await;
+            }
             match tokio::time::timeout(within, provider.worker_state(instance_id)).await {
                 Ok(Ok(WorkerLiveness::Gone)) => return,
                 Ok(Ok(state)) => {
-                    debug!(name: "worker.state", %instance_id, ?state, "A worker an earlier hub left isn't gone");
+                    debug!(name: "worker.state", %instance_id, ?state, "A worker that isn't connected isn't gone");
                 }
                 // An adapter that can't say, which is most of them.
-                Ok(Err(ProviderError::Unsupported(_))) => break,
-                Ok(Err(ProviderError::Adapter(e))) if e.code == ErrorCode::Unsupported => break,
+                Ok(Err(ProviderError::Unsupported(_))) => {
+                    hub.disconnected.asked(instance_id, Asked::CannotSay);
+                    break;
+                }
+                Ok(Err(ProviderError::Adapter(e))) if e.code == ErrorCode::Unsupported => {
+                    hub.disconnected.asked(instance_id, Asked::CannotSay);
+                    break;
+                }
                 Ok(Err(e)) => {
                     debug!(
                         name: "worker.state_unasked",
                         %instance_id,
                         error = error_chain(&e),
-                        "Couldn't ask whether a worker an earlier hub left is running"
+                        "Couldn't ask whether a worker that isn't connected is running"
                     );
                 }
                 Err(_) => {}
             }
-            pause(pace).await;
+            hub.disconnected.asked(instance_id, Asked::Said);
+            if !entry {
+                pause(ASK_AGAIN_EVERY).await;
+            }
         }
         std::future::pending::<()>().await;
     };
     tokio::select! {
         dialed = hub.dial.worker(instance_id, within) => Ok(dialed),
-        () = gone => Err(ApiError::new(ErrorCode::Worker, "the worker an earlier hub left is gone")),
+        () = gone => Err(ApiError::new(ErrorCode::Worker, "the worker that isn't connected is gone")),
     }
 }
 
@@ -187,7 +199,7 @@ async fn pause(pause: Duration) {
 fn didnt_dial(within: Duration, opening: Opening) -> ApiError {
     let code = match opening {
         Opening::Started => ErrorCode::Worker,
-        Opening::LeftRunning { .. } => ErrorCode::Unavailable,
+        Opening::LeftRunning => ErrorCode::Unavailable,
     };
     ApiError::new(code, format!("the worker didn't dial the hub within {within:?}"))
 }
@@ -206,15 +218,13 @@ async fn by_command(
             provider.start(instance_id, hub.worker_builds(), None).await.map_err(|e| provider_failed(&e))?;
             provider.connect(instance_id).await.map_err(|e| provider_failed(&e))
         }
-        Opening::LeftRunning { .. } => {
-            match tokio::time::timeout(before_serving, provider.connect(instance_id)).await {
-                Ok(command) => command.map_err(|e| provider_failed(&e)),
-                Err(_) => Err(ApiError::new(
-                    ErrorCode::Worker,
-                    format!("the provider didn't say how to reach the worker within {before_serving:?}"),
-                )),
-            }
-        }
+        Opening::LeftRunning => match tokio::time::timeout(before_serving, provider.connect(instance_id)).await {
+            Ok(command) => command.map_err(|e| provider_failed(&e)),
+            Err(_) => Err(ApiError::new(
+                ErrorCode::Worker,
+                format!("the provider didn't say how to reach the worker within {before_serving:?}"),
+            )),
+        },
     }?;
     let Spawned { process, reader, writer } =
         child_process::spawn(&command.program, &command.args, &command.env, &hub.machine, Stderr::Log(log))

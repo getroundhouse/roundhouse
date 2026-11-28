@@ -57,12 +57,14 @@ pub(in super::super) async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut incoming = FrameReader::new(reader);
+    let dialed_again = hub.dial.dialed_again(&instance_id);
+    tokio::pin!(dialed_again);
     loop {
         // The worker's own timer can say its connection has dropped before the hub's does, and it then dials again.
         // That's the worker's word that this connection is no use, so the hub lets go of it for the new one.
         let read = tokio::select! {
             read = incoming.next() => read,
-            () = hub.dial.dialed_again(&instance_id), if link.connection_dropped() => {
+            () = &mut dialed_again, if link.connection_dropped() => {
                 info!(name: "worker.dialed_again", %instance_id, "A worker dialed again, so its old connection is let go");
                 break;
             }
@@ -139,6 +141,15 @@ async fn connection_ended(
     instance_id: &InstanceId,
 ) {
     debug!(name: "worker.connection_ended", %instance_id, "Worker connection ended");
+    let dropped = !link.left.load(Ordering::SeqCst) && link.connection_dropped();
+    // Before its calls fail and it looks closed, so nothing that finds it so finds its workspace not disconnected yet,
+    // and starts a worker where this one may be running.
+    let disconnecting = if dropped {
+        link.note_dropped();
+        hub.begin_disconnect(workspace_id, link, instance_id)
+    } else {
+        None
+    };
     // Wakes each waiting call with an error, as for a worker that's gone, and none is sent again over the next
     // connection: what it asked for may have been done, and no request of the worker's is safe to send twice but the
     // few the hub already repeats, such as the sets of tool servers and credentials, which the next link greets the
@@ -147,13 +158,14 @@ async fn connection_ended(
     // `LiveSession::deliver` says.
     link.calls.end();
     // A worker the hub left running has gone on to the next hub, and nothing of it has gone.
-    if !link.left.load(Ordering::SeqCst) {
-        if link.connection_dropped() {
-            // No goodbye, so nothing says the worker has gone: it's waited for, and dials again.
-            hub.worker_disconnected(workspace_id, link, instance_id).await;
-        } else {
-            hub.worker_gone(workspace_id, link, provider, instance_id).await;
+    if dropped {
+        // No goodbye, so nothing says the worker has gone: it's waited for, and dials again. Not if the hub has
+        // replaced it already, which has its own.
+        if let Some(newly) = disconnecting {
+            hub.worker_disconnected(workspace_id, link, instance_id, newly).await;
         }
+    } else if !link.left.load(Ordering::SeqCst) {
+        hub.worker_gone(workspace_id, link, provider, instance_id).await;
     }
     // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
     // the value unset, and whoever waits later would wait forever.

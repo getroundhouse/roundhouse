@@ -20,7 +20,7 @@ async fn a_prompt_sent_while_the_worker_is_disconnected_is_recorded_and_given_to
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
-    hub.disconnected.mark(&workspace.id, Cause::ConnectionDropped);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
 
     let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("while you were away"), None).await.unwrap();
     waiting::task::for_what_mustnt_happen(Duration::from_millis(300)).await;
@@ -46,7 +46,7 @@ async fn a_hub_that_cant_reach_a_workspaces_worker_isnt_idle() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, _) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
-    hub.disconnected.mark(&workspace.id, Cause::ConnectionDropped);
+    hub.disconnected.mark(&workspace.id, &workspace.instance_id, Cause::ConnectionDropped, true);
 
     let refused = hub.shutdown_if_idle();
 

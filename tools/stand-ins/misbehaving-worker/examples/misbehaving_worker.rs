@@ -7,6 +7,9 @@
 //!
 //! - `another-version`: answers the hub's hello as a worker that speaks another version of the worker protocol.
 //! - `silent`: answers nothing.
+//! - `drops-when-asked-what-it-runs`: answers the hub as a worker running nothing does, but ends its connection, with
+//!   no goodbye, the first time it's asked which agents it's running, which is as the hub takes it up. It dials again,
+//!   and answers.
 //!
 //! It holds its connection until it's ended, or its test has gone.
 
@@ -22,7 +25,9 @@ use process::ProcessRecord;
 use process::testing::TestProcess;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::dialing::WorkerTicket;
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome};
+use protocol::worker::{
+    HelloReply, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 
 /// What says how it misbehaves.
 const MISBEHAVES: &str = "MISBEHAVING_WORKER";
@@ -38,6 +43,9 @@ fn main() {
     let state_dir = PathBuf::from(after(&args, "--state-dir"));
     std::fs::create_dir_all(&state_dir).unwrap();
     ProcessRecord::write(&state_dir.join(protocol::paths::WORKER_RECORD_FILE), std::process::id()).unwrap();
+    // As a worker holds its instance, which its provider says it's running by, until it's gone.
+    let claim = std::fs::File::create(state_dir.join(protocol::paths::WORKER_LOCK_FILE)).unwrap();
+    claim.try_lock().unwrap();
     let misbehaves = std::env::var(MISBEHAVES).unwrap();
     let test = TestProcess::from_env(|name| std::env::var(name).ok());
     tokio::runtime::Runtime::new().unwrap().block_on(async move {
@@ -46,6 +54,7 @@ fn main() {
             () = TestProcess::until_gone(test) => {}
         }
     });
+    drop(claim);
 }
 
 /// Itself again, without `--detach`, apart from what ran it, as a worker starts itself, given `ticket` on its stdin.
@@ -81,7 +90,47 @@ async fn misbehave(ticket: &str, how: &str) {
             write_frame(&mut admitted.send, &reply).await.unwrap();
         }
         "silent" => {}
+        "drops-when-asked-what-it-runs" => answer_dropping_once(&endpoint, &ticket.secret, admitted).await,
         other => panic!("{MISBEHAVES} is {other:?}, which isn't a way it misbehaves"),
     }
     std::future::pending::<()>().await;
+}
+
+/// Answers every call the hub makes of a worker as one running nothing does, over each connection it dials, and ends
+/// the first connection it's asked which agents it runs on, with no goodbye. Dials again whenever a connection ends.
+#[expect(clippy::disallowed_methods, reason = "the pause between dials that failed")]
+async fn answer_dropping_once(
+    endpoint: &WorkerEndpoint,
+    secret: &protocol::dialing::TicketSecret,
+    mut admitted: dialing::Admitted,
+) {
+    let mut dropped = false;
+    loop {
+        while let Ok(call) = read_frame::<WorkerCall>(&mut admitted.recv).await {
+            let response = match call.request {
+                WorkerRequest::Hello(hello) => {
+                    WorkerResponse::Hello(HelloReply { protocol_version: hello.protocol_version, build: None })
+                }
+                WorkerRequest::RunningAgents if !dropped => {
+                    dropped = true;
+                    admitted.connection.close(2u32.into(), b"a connection that drops");
+                    break;
+                }
+                WorkerRequest::RunningAgents => {
+                    WorkerResponse::RunningAgents(RunningAgentsReply { agents: Vec::new() })
+                }
+                _ => WorkerResponse::Ok,
+            };
+            let reply = WorkerFrame::Reply { id: call.id, outcome: WorkerOutcome::Response(response) };
+            if write_frame(&mut admitted.send, &reply).await.is_err() {
+                break;
+            }
+        }
+        admitted = loop {
+            match endpoint.dial_admitted(secret).await {
+                Ok(admitted) => break admitted,
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            }
+        };
+    }
 }

@@ -142,3 +142,39 @@ fn a_worker_that_never_answers_its_hello_is_given_up_on_and_ended() {
     restore_real_worker(&exe);
     client.workspace_status(&hung.id).unwrap();
 }
+
+/// A hub that starts finds a worker an earlier hub left, and its connection drops as the hub takes it up: asking which
+/// agents it runs. That says nothing of the worker, which dials again, so it's left running and carried on with, rather
+/// than ended and its sessions' agents recorded as lost.
+#[test]
+fn a_connection_that_drops_as_its_worker_is_taken_up_leaves_the_worker_waited_for_and_not_ended() {
+    let mut stack = Stack::start_with(vec![misbehaving("drops-when-asked-what-it-runs")]);
+    let exe = hub_from_copy(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    client.workspace_status(&workspace.id).unwrap();
+    replace_with_misbehaving(&exe);
+    kill_workers(&stack, &client);
+    // The workspace's next worker is the stand-in, which answers as one running nothing.
+    let _ = client.workspace_status(&workspace.id);
+    wait_until("the stand-in to be the worker", || client.hub_status().unwrap().workers == 1);
+    let stand_in = workers(&stack).pop().unwrap();
+    drop(client);
+
+    stack.kill_hub();
+    let logged_before = std::fs::read_to_string(stack.hub_log()).unwrap_or_default().len();
+    stack.start_hub();
+
+    // What the next hub logged, since the first logged the real worker it found gone.
+    let next_hub_logged = || std::fs::read_to_string(stack.hub_log()).unwrap_or_default()[logged_before..].to_string();
+    let client = stack.client();
+    wait_until("the worker to be carried on with", || {
+        client.hub_status().unwrap().workers == 1 && next_hub_logged().contains("recovery.worker_connected")
+    });
+    let log = next_hub_logged();
+    assert!(process::testing::is_running(stand_in.pid), "the hub ended a worker whose connection only dropped");
+    assert!(!log.contains("recovery.worker_unreached"), "the worker was taken for one that couldn't be reached");
+    assert!(log.contains("worker.unread") || log.contains("worker.connection_ended"), "its connection never dropped");
+    restore_real_worker(&exe);
+    kill_workers(&stack, &client);
+}

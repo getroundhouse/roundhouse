@@ -265,11 +265,12 @@ impl LiveSession {
         }
     }
 
-    /// Interrupts the session, whose agent isn't on the worker its hub has reached, as the hub does for one
-    /// that isn't live as it starts: its open approvals are cancelled, and the prompts its agent hadn't taken are dropped. Then
-    /// its agent's exit is recorded for `reason`, which leaves a session whose only work is a wait that the hub
+    /// Interrupts the session, whose agent isn't on its workspace's worker, which the hub has reached again, whether an
+    /// earlier hub left it or its connection dropped: its open approvals are cancelled, and the prompts its agent hadn't
+    /// taken are dropped. Then its agent's exit is recorded for `reason`, which says whether it was the hub's restart or
+    /// the worker's loss, which leaves a session whose only work is a wait that the hub
     /// keeps, `waiting`, still at work in the background.
-    pub(crate) async fn interrupted_by_restart(&self, waiting: bool, reason: ExitReason) {
+    pub(crate) async fn interrupted_with_no_agent(&self, waiting: bool, reason: ExitReason) {
         // It's not on the worker, so the next prompt starts one rather than finding this one lost.
         self.state.lock().agent = None;
         self.cancel_approvals(None).await;
