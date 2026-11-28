@@ -56,6 +56,13 @@ impl Hub {
         if let Some(found) = self.open_worker(workspace_id) {
             return Ok(found);
         }
+        // Starting a worker would end the one an earlier hub left there, which may be at work, so it's waited for.
+        if self.disconnected.lock().contains(workspace_id) {
+            return Err(ApiError::new(
+                ErrorCode::Unavailable,
+                "the workspace's worker hasn't connected to the hub since it started, and is waited for rather than replaced",
+            ));
+        }
         let workspace = self.workspace(workspace_id).await?;
         jobs::step("waiting for its turn to start the workspace's worker");
         let gate = self.worker_gate(workspace_id);
@@ -117,6 +124,8 @@ impl Hub {
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id);
         let link = match WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::LeftRunning).await {
             Ok(link) => link,
+            // One that hasn't dialed, and isn't said to be gone, may be at work yet, so it's left, and waited for.
+            Err(e) if e.code == ErrorCode::Unavailable => return Err(e),
             Err(e) => {
                 drop(cleared);
                 self.end_left_running(workspace.id, None);
@@ -324,7 +333,7 @@ impl Hub {
     /// Ends whatever worker runs on the instance, so another can start there and claim it, and forgets the key of a
     /// worker that dialed the hub there, so a hub that starts doesn't wait for it. Whether that worked, since until it
     /// has, a new worker may find the instance taken.
-    async fn clear_instance(&self, provider: &dyn Provider, instance_id: &InstanceId) -> bool {
+    pub(super) async fn clear_instance(&self, provider: &dyn Provider, instance_id: &InstanceId) -> bool {
         if let Err(e) = provider.end_worker(instance_id).await {
             warn!(name: "worker.unended", %instance_id, error = error_chain(&e), "Couldn't end the worker on an instance");
             return false;

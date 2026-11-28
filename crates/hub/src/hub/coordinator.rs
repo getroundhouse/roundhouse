@@ -37,7 +37,7 @@ use protocol::model::{
 use providers::Provider;
 use sessions::Sessions;
 use setup::SetupGate;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -78,6 +78,11 @@ pub(crate) struct Hub {
     /// earlier one left there, and from the moment a worker is started or let go of until it's in the map or the
     /// instance has been cleared, so a start or stop dropped partway leaves the next start to clear it. A start that
     /// fails leaves it false too, but one refused because another worker serves the instance leaves it as it was.
+    /// The workspaces whose worker an earlier hub left, and that hasn't dialed this one, so its agents may still be
+    /// running there. Each is waited for, and nothing replaces its worker, as [`Hub::ensure_worker`] says, until it
+    /// dials, its provider says it's gone, or the hub stops. Only in memory, since a hub that starts finds each again
+    /// from the workers that last dialed.
+    pub(super) disconnected: Mutex<HashSet<WorkspaceId>>,
     pub(super) worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<bool>>>>,
     /// Held to read while one of a workspace's other worktrees is made, and to write while one is removed, their
     /// records are settled or the workspace is archived, so nothing is removed or forgotten as it's made, which would
@@ -190,6 +195,7 @@ impl Hub {
             providers,
             agents,
             workers: Mutex::new(HashMap::new()),
+            disconnected: Mutex::new(HashSet::new()),
             worker_gates: Mutex::new(HashMap::new()),
             child_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),

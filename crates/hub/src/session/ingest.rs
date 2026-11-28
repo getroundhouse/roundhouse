@@ -265,6 +265,24 @@ impl LiveSession {
         }
     }
 
+    /// Interrupts the session, whose agent isn't on the worker its hub has reached, as the hub does for one
+    /// that isn't live as it starts: its open approvals are cancelled, and the prompts its agent hadn't taken are dropped. Then
+    /// its agent's exit is recorded as the hub's restart, which leaves a session whose only work is a wait that the hub
+    /// keeps, `waiting`, still at work in the background.
+    pub(crate) async fn interrupted_by_restart(&self, waiting: bool) {
+        self.cancel_approvals(None).await;
+        let untaken = self.state.lock().progress.queue.untaken().to_vec();
+        for prompt in untaken {
+            self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt }).await;
+        }
+        if waiting {
+            self.outlive_this_hub().await;
+        }
+        let body =
+            EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
+        self.record_or_log(Origin::Hub, body).await;
+    }
+
     /// Lets go of its agent if it's on the worker `link`, which the hub is about to stop with nothing at work, to
     /// replace it. The agent's exit is then of one the session has moved on from, so it changes nothing, even if a
     /// prompt is recorded first, and the next prompt starts an agent on the next worker, which resumes the

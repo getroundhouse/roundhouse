@@ -20,10 +20,11 @@ use crate::worker_dial::{Dialed, Endpoint};
 pub(crate) enum Opening {
     /// One started on the instance if it's not running already. What it sends goes to its sessions from the start.
     Started,
-    /// One an earlier hub left running, as the hub starts and before it serves, so it has only
+    /// One an earlier hub left running, which is looked for as the hub starts, for
     /// [`Timers::before_serving`](crate::Timers::before_serving) to dial the hub again, or its provider to say how to
-    /// reach it. What it sends is held until [`WorkerLink::release`], so the hub can say first which agent each
-    /// session has, and what the worker sends again of what the earlier hub missed is taken for that agent's.
+    /// reach it, and then again and again while its workspace is disconnected. What it sends is held until
+    /// [`WorkerLink::release`], so the hub can say first which agent each session has, and what the worker sends again
+    /// of what the earlier hub missed is taken for that agent's.
     LeftRunning,
 }
 
@@ -38,7 +39,8 @@ pub(super) struct Reached {
 /// the provider to put there, and a ticket for the worker to dial the hub with, at the endpoint the provider's
 /// [`WorkerReach`](providers::WorkerReach) says. On failure nothing is left running that the hub started. A worker
 /// [`Opening::LeftRunning`] has the hub's `before_serving` to dial, or its provider to say how to reach it, as for one
-/// an earlier build left, which doesn't dial.
+/// an earlier build left, which doesn't dial, and fails with `Unavailable` if it doesn't, which leaves the workspace
+/// disconnected, or `Worker` if its provider says it's gone.
 pub(super) async fn reach(
     hub: &Hub,
     provider: &dyn Provider,
@@ -111,7 +113,7 @@ async fn dialed(
         Opening::Started => hub.dial.worker(instance_id, within).await,
         Opening::LeftRunning => dial_unless_gone(hub, provider, instance_id, within).await?,
     }
-    .ok_or_else(|| didnt_dial(within))?;
+    .ok_or_else(|| didnt_dial(within, opening))?;
     Ok(Reached {
         carrier: Carrier::Dialed(dialed.connection),
         reader: Box::new(dialed.recv),
@@ -168,8 +170,14 @@ async fn pause(pause: Duration) {
     tokio::time::sleep(pause).await;
 }
 
-fn didnt_dial(within: Duration) -> ApiError {
-    ApiError::new(ErrorCode::Worker, format!("the worker didn't dial the hub within {within:?}"))
+/// A worker started now that doesn't dial has failed, and one an earlier hub left that doesn't is unavailable, since
+/// it may still be running, so asking again later may find it.
+fn didnt_dial(within: Duration, opening: Opening) -> ApiError {
+    let code = match opening {
+        Opening::Started => ErrorCode::Worker,
+        Opening::LeftRunning => ErrorCode::Unavailable,
+    };
+    ApiError::new(code, format!("the worker didn't dial the hub within {within:?}"))
 }
 
 /// Runs the command the local provider gives to reach one of its workers that doesn't dial.

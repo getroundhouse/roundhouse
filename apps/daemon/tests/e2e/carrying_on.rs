@@ -47,13 +47,13 @@ fn wait_for_the_hub_to_go(stack: &mut Stack) {
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
 }
 
-fn count(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> usize {
+pub(crate) fn count(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> usize {
     events.iter().filter(|e| wanted(&e.body)).count()
 }
 
 /// What an agent says with no hub there is kept by its worker, and recorded once by the next hub, along with what it
 /// said before, which the worker may have kept too, if the hub went before saying it had recorded it.
-fn assert_one_agent_said_it_all_once(events: &[SessionEvent], said: &str) {
+pub(crate) fn assert_one_agent_said_it_all_once(events: &[SessionEvent], said: &str) {
     assert_gapless(events);
     assert_eq!(assistant_text(events), said, "{events:#?}");
     assert_eq!(count(events, |b| matches!(b, EventBody::AgentStarted { .. })), 1, "{events:#?}");

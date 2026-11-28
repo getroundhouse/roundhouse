@@ -6,7 +6,6 @@ use std::process::Command;
 use std::time::Duration;
 
 use client_core::{ClientError, Connection, SubscriptionItem};
-use hub::Timers;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
@@ -192,13 +191,13 @@ fn patient_with_output() -> worker::Timers {
     worker::Timers { agent_drain: Duration::from_mins(1), ..worker::Timers::FOR_TESTS }
 }
 
+/// A worker that's still stopping neither dials nor is gone, so the next hub waits for it, without ending it, and
+/// recovers the workspace once it has gone.
 #[test]
-fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
-    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts. The next
-    // hub gives a worker ten minutes to say hello, so one that waited for it to stop would hold the hub up far longer
-    // than the test waits for it to serve, however slow the machine.
-    let hellos = Timers { hello_within: Duration::from_mins(10), ..Timers::FOR_TESTS };
-    let mut stack = Stack::start_with(vec![patient_with_output().env(), hellos.env()]);
+fn the_next_hub_waits_for_a_worker_the_last_one_left_still_stopping_and_recovers_once_it_has_gone() {
+    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts, and the
+    // test ends the wait.
+    let mut stack = Stack::start_with(vec![patient_with_output().env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let go = stack.path("late-output");
@@ -217,15 +216,16 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     wait_until("the agent to stop", || !is_alive(agent_pid));
     stack.kill_hub();
     assert!(is_alive(worker_pid), "the worker should still be waiting for its agent's last output");
-    // Rather than waiting for a worker that may be stuck.
+    // The hub serves, though the worker isn't gone, and leaves it, as it may be at work.
     stack.start_hub();
     let client = stack.client();
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
-    client.session_prompt(&session.id, "say:second", None).unwrap();
+    assert!(is_alive(worker_pid), "the next hub ended a worker that wasn't gone");
 
-    wait_until("the second turn to finish", || assistant_text(&read_all(&client, &session.id)).ends_with("second"));
-    assert!(!is_alive(worker_pid), "the worker the last hub left should have been ended");
     std::fs::write(&go, "").unwrap();
+    wait_until("the worker to stop", || !is_alive(worker_pid));
+    wait_for_status(&client, &session.id, SessionStatus::Interrupted);
+    client.session_prompt(&session.id, "say:second", None).unwrap();
+    wait_until("the second turn to finish", || assistant_text(&read_all(&client, &session.id)).ends_with("second"));
 }
 
 #[test]

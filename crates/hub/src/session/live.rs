@@ -65,6 +65,7 @@ pub(super) struct AgentRun {
 
 /// What a session carries on with from an earlier hub, whose agent is still running on a worker this hub has
 /// connected to again.
+#[derive(Clone)]
 pub(crate) struct CarriedOver {
     /// The connection this hub reached the agent's worker on.
     pub link: WorkerLinkId,
@@ -227,6 +228,34 @@ impl LiveSession {
             session.wake_queue();
         }
         session
+    }
+
+    /// Has a session that was made before its agent's worker dialed the hub carry on with `carried`, as one made after
+    /// does, as a workspace whose worker dialed late has each of its sessions do. A client could have followed the
+    /// session meanwhile, which makes it, with no agent, and what it recorded since is what the agent finds. The
+    /// `capabilities` are what the session's record says its run claims now. Does
+    /// nothing to one that has an agent already.
+    pub(crate) fn carry_on_with(
+        self: &Arc<Self>,
+        carried: CarriedOver,
+        capabilities: Option<protocol::model::RunCapabilities>,
+    ) {
+        let CarriedOver { link, run, recorded, untaken } = carried;
+        {
+            let mut state = self.state.lock();
+            if state.agent.is_some() {
+                return;
+            }
+            state.agent = Some(AgentRun { link, run });
+            state.capabilities = capabilities;
+            state.recorded = recorded;
+            state.had_servers = Some(HadServers::new(run, ServersAsSent::default()));
+            for asked_by in state.progress.approvals.values_mut() {
+                asked_by.get_or_insert(run);
+            }
+            state.progress.queue.set_untaken(untaken);
+        }
+        self.carried_on(run);
     }
 
     /// Does for `run`, which an earlier hub left running, what the last hub may not have.
