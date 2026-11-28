@@ -1,176 +1,15 @@
-//! Fetching from a local server that answers as each test tells it.
-
-#![cfg(test)]
+//! A big file checked against what it should be: fetched into its part, gone on with from there, thrown away when
+//! it isn't the file, stopped, held to its folder's lock, and timed out.
 
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use fetching::serving::{Event, NOWHERE, Reply, serve};
+use fetching::serving::{Event, Reply, serve};
 use fetching::{CheckError, Expected, FetchError, Fetched, Fetcher, FolderLock};
 use ring::digest::{SHA256, digest};
-
-fn fetcher() -> Fetcher {
-    Fetcher::new(Duration::from_secs(10))
-}
-
-#[test]
-fn a_body_comes_decompressed() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::gzipped(b"the feed").unwrap()])]).unwrap();
-
-    assert_eq!(fetcher().bytes(&format!("{}/feed", server.base), 100).unwrap(), b"the feed");
-}
-
-#[test]
-fn a_body_longer_than_the_limit_once_decompressed_is_refused() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::gzipped(&vec![b' '; 1001]).unwrap()])]).unwrap();
-
-    let fetched = fetcher().bytes(&format!("{}/feed", server.base), 1000);
-
-    assert!(matches!(fetched, Err(FetchError::TooLong { limit_bytes: 1000, .. })), "{fetched:?}");
-}
-
-/// Were the rest read, the connection's end would be what stopped it.
-#[test]
-fn a_body_past_the_limit_is_refused_without_reading_the_rest() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::cut_off(vec![b' '; 1001], 1_000_000)])]).unwrap();
-
-    let fetched = fetcher().bytes(&format!("{}/feed", server.base), 1000);
-
-    assert!(matches!(fetched, Err(FetchError::TooLong { limit_bytes: 1000, .. })), "{fetched:?}");
-}
-
-#[test]
-fn a_body_cut_off_in_transit_cant_be_read() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::cut_off("12345", 10)])]).unwrap();
-
-    let fetched = fetcher().bytes(&format!("{}/feed", server.base), 100);
-
-    assert!(matches!(fetched, Err(FetchError::Read { .. })), "{fetched:?}");
-}
-
-#[test]
-fn an_answer_other_than_the_whole_file_is_refused() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::partial("the feed")])]).unwrap();
-
-    let fetched = fetcher().bytes(&format!("{}/feed", server.base), 100);
-
-    assert!(matches!(fetched, Err(FetchError::Status { status: 206, .. })), "{fetched:?}");
-}
-
-#[test]
-fn a_body_as_long_as_the_limit_is_taken() {
-    let server = serve(vec![("feed".to_string(), vec![Reply::file(vec![b' '; 1000])])]).unwrap();
-
-    assert_eq!(fetcher().bytes(&format!("{}/feed", server.base), 1000).unwrap().len(), 1000);
-}
-
-#[test]
-fn a_range_asks_for_its_bytes_and_takes_them() {
-    let server = serve(vec![("archive".to_string(), vec![Reply::partial("clip")])]).unwrap();
-
-    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
-
-    assert_eq!(fetched.unwrap(), b"clip");
-    assert!(server.requests()[0].to_lowercase().contains("range: bytes=10-13"), "{:?}", server.requests());
-}
-
-#[test]
-fn a_range_of_nothing_asks_for_nothing() {
-    let server = serve(vec![("archive".to_string(), vec![Reply::partial("clip")])]).unwrap();
-
-    assert_eq!(fetcher().range(&format!("{}/archive", server.base), 10, 0).unwrap(), b"");
-    assert!(server.requests().is_empty(), "{:?}", server.requests());
-}
-
-/// A server that doesn't answer ranges sends the whole file, which isn't the bytes asked for.
-#[test]
-fn a_range_answered_with_the_whole_file_is_refused() {
-    let server = serve(vec![("archive".to_string(), vec![Reply::file("the whole archive")])]).unwrap();
-
-    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
-
-    assert!(matches!(fetched, Err(FetchError::Status { status: 200, .. })), "{fetched:?}");
-}
-
-#[test]
-fn a_range_shorter_than_asked_for_is_refused() {
-    let server = serve(vec![("archive".to_string(), vec![Reply::partial("cl")])]).unwrap();
-
-    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
-
-    assert!(matches!(fetched, Err(FetchError::CutShort { expected_bytes: 4, got_bytes: 2, .. })), "{fetched:?}");
-}
-
-#[test]
-fn a_redirect_is_an_answer_and_not_followed() {
-    let elsewhere = serve(vec![("feed".to_string(), vec![Reply::file("the feed")])]).unwrap();
-    let server = serve(vec![("feed".to_string(), vec![Reply::redirect(&format!("{}/feed", elsewhere.base))])]).unwrap();
-
-    let fetched = fetcher().bytes(&format!("{}/feed", server.base), 100);
-
-    assert!(matches!(fetched, Err(FetchError::Status { status: 302, .. })), "{fetched:?}");
-    assert!(elsewhere.asked().is_empty());
-}
-
-#[test]
-fn a_file_that_isnt_there_says_so_and_names_its_address() {
-    let server = serve(vec![]).unwrap();
-    let url = format!("{}/feed", server.base);
-
-    let fetched = fetcher().bytes(&url, 100);
-
-    assert!(matches!(&fetched, Err(FetchError::Status { url: named, status: 404 }) if *named == url), "{fetched:?}");
-}
-
-#[test]
-fn a_server_that_isnt_there_says_so_and_names_its_address() {
-    let url = format!("{NOWHERE}/feed");
-
-    let fetched = fetcher().bytes(&url, 100);
-
-    assert!(matches!(&fetched, Err(FetchError::Request { url: named, .. }) if *named == url), "{fetched:?}");
-}
-
-#[test]
-fn a_file_is_written_whole() {
-    let server = serve(vec![("package".to_string(), vec![Reply::gzipped(b"12345").unwrap()])]).unwrap();
-    let dir = tempfile::tempdir().unwrap();
-    let to = dir.path().join("package");
-
-    fetcher().to_file(&format!("{}/package", server.base), &to, 5).unwrap();
-
-    assert_eq!(std::fs::read(to).unwrap(), b"12345");
-}
-
-#[test]
-fn a_file_shorter_or_longer_than_it_should_be_is_refused() {
-    let server = serve(vec![
-        ("short".to_string(), vec![Reply::file("12345")]),
-        ("long".to_string(), vec![Reply::file("123456")]),
-    ])
-    .unwrap();
-    let dir = tempfile::tempdir().unwrap();
-    let to = dir.path().join("package");
-
-    let short = fetcher().to_file(&format!("{}/short", server.base), &to, 6);
-    let long = fetcher().to_file(&format!("{}/long", server.base), &to, 5);
-
-    assert!(matches!(short, Err(FetchError::CutShort { expected_bytes: 6, got_bytes: 5, .. })), "{short:?}");
-    assert!(matches!(long, Err(FetchError::TooLong { limit_bytes: 5, .. })), "{long:?}");
-}
-
-#[test]
-fn a_file_that_cant_be_saved_names_where() {
-    let server = serve(vec![("package".to_string(), vec![Reply::file("12345")])]).unwrap();
-    let to = tempfile::tempdir().unwrap().path().join("gone").join("package");
-
-    let fetched = fetcher().to_file(&format!("{}/package", server.base), &to, 5);
-
-    assert!(matches!(&fetched, Err(FetchError::Save { path, .. }) if *path == to), "{fetched:?}");
-}
 
 /// A file made up for a test: `bytes` of a pattern, and what it should be.
 fn made_up(bytes: usize) -> (Vec<u8>, Expected) {
@@ -309,18 +148,34 @@ fn wait_for(what: &str, done: impl Fn() -> bool) {
     waiting::thread::until(Duration::from_secs(10), format!("timed out waiting for {what}"), done);
 }
 
+/// What a fetch on a thread of its own is told, and what it says.
+#[derive(Default)]
+struct Watched {
+    /// Whether it's to stop, which it asks after each part of the file it writes.
+    stop: AtomicBool,
+    /// How much of the file it had written when it last asked and was told to go on.
+    went_on_at: AtomicU64,
+}
+
 /// A fetch of `url` into `dir`'s `model/weights.bin` on a thread of its own, holding `dir`'s lock, until it ends or
-/// `stop` is set.
+/// it's told to stop.
 fn fetch_on_a_thread(
     dir: &Path,
     url: String,
     expected: Expected,
-    stop: Arc<AtomicBool>,
+    watched: Arc<Watched>,
 ) -> std::thread::JoinHandle<Result<Fetched, CheckError>> {
     let dir = dir.to_path_buf();
     std::thread::spawn(move || {
         let lock = FolderLock::take(&dir).unwrap();
-        let mut on = |_| if stop.load(Ordering::Relaxed) { ControlFlow::Break(()) } else { ControlFlow::Continue(()) };
+        let mut on = |bytes| {
+            if watched.stop.load(Ordering::Relaxed) {
+                return ControlFlow::Break(());
+            }
+            // Stored once the stop is read, so a stop set after a test sees it is read no sooner than the next ask.
+            watched.went_on_at.store(bytes, Ordering::Release);
+            ControlFlow::Continue(())
+        };
         let to = Path::new("model/weights.bin");
         Fetcher::for_big_files(Duration::from_secs(10)).checked_file(&lock, &url, to, &expected, &mut on)
     })
@@ -333,12 +188,13 @@ fn a_stopped_fetch_keeps_what_came_and_the_next_waits_for_it_to_let_go() {
     let server = serve(vec![("weights.bin".to_string(), vec![first, Reply::file(body.clone())])]).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let url = format!("{}/weights.bin", server.base);
-    let size = || std::fs::metadata(part(dir.path())).map_or(0, |found| found.len());
 
-    let stop = Arc::new(AtomicBool::new(false));
-    let stopping = fetch_on_a_thread(dir.path(), url.clone(), expected, Arc::clone(&stop));
-    wait_for("the first fetch to write what it was sent", || size() == 50_000);
-    stop.store(true, Ordering::Relaxed);
+    let watched = Arc::new(Watched::default());
+    let stopping = fetch_on_a_thread(dir.path(), url.clone(), expected, Arc::clone(&watched));
+    // Until it has gone on past what it was sent, rather than until that's in the file, since it writes before it asks
+    // whether to stop, and a stop it read then would end it before the server lets the rest go.
+    wait_for("the first fetch to go on past what it was sent", || watched.went_on_at.load(Ordering::Acquire) == 50_000);
+    watched.stop.store(true, Ordering::Relaxed);
     let next = fetch_on_a_thread(dir.path(), url, expected, Arc::default());
     release.now();
 
@@ -376,12 +232,4 @@ fn a_fetch_that_stops_coming_times_out_and_keeps_what_came() {
     let Err(CheckError::Fetch(error)) = fetched else { panic!("{fetched:?}") };
     assert!(matches!(error, FetchError::Read { .. }) && error.timed_out(), "{error:?}");
     assert_eq!(std::fs::metadata(part(dir.path())).unwrap().len(), 50_000);
-}
-
-#[test]
-fn only_a_wait_that_ran_out_timed_out() {
-    let server = serve(vec![("there".to_string(), vec![Reply::file("not")])]).unwrap();
-    let missing = fetcher().bytes(&format!("{}/elsewhere", server.base), 10).unwrap_err();
-    let refused = fetcher().bytes(&format!("{NOWHERE}/feed"), 10).unwrap_err();
-    assert!(!missing.timed_out() && !refused.timed_out(), "{missing:?} {refused:?}");
 }
